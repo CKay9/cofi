@@ -1,6 +1,10 @@
 # 🌽 Corn Field (cofi)
 
-A simple terminal utility to manage and quickly access your config files.
+A simple terminal utility to manage and quickly access your frequently used config files.
+
+## Demo
+
+![cofi in action](./images/cofi.gif)
 
 ## Features
 - Quickly access favorite config files

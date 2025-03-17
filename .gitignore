@@ -1,9 +1,11 @@
 # Zig cache and build output
 .zig-cache/
 .zig-out/
+zig-out
 *.o
 *.exe
 *.bin
+cofi
 
 # MacOS junk files
 .DS_Store

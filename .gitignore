@@ -12,3 +12,6 @@
 *.log
 *.tmp
 *.bak
+
+# Additionals
+bookmarks.txt

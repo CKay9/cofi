@@ -1,0 +1,14 @@
+# Zig cache and build output
+.zig-cache/
+.zig-out/
+*.o
+*.exe
+*.bin
+
+# MacOS junk files
+.DS_Store
+
+# Logs and temps
+*.log
+*.tmp
+*.bak

@@ -1,0 +1,2 @@
+~/.config/nvim/init.lua          " Neovim main config
+~/.config/starship.toml          " Starship main config

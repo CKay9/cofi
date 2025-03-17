@@ -1,4 +1,4 @@
-# 🌽 Corn Field (cofi)
+# 🌽 Cornfield (cofi)
 
 A simple terminal utility to manage and quickly access your frequently used config files.
 

@@ -11,9 +11,7 @@ A lightweight, fast terminal utility for managing and accessing your configurati
 - Quickly access favorite config files
 - Interactive terminal UI with vim-like keybindings
 - Directly open any config file on your computer with a short command
-```bash
-# Opens first item in the list with your standard editor, defined in environment variables
-cofi 1
+- Automatically uses your favorite editor, as defined in environment variables
 
 ## Installation
 
@@ -33,3 +31,12 @@ zig build
 mkdir -p ~/bin
 cp zig-out/bin/cofi ~/bin/
 chmod +x ~/bin/cofi
+```
+
+Once you have added config files, directly open them with a short command. 
+To access the first item in the list, simply type:
+```bash
+cofi 1
+```
+**More features coming soon!**
+

@@ -39,7 +39,6 @@ pub fn getHomeDirectory(allocator: Allocator) ![]const u8 {
     return allocator.dupe(u8, home_dir);
 }
 
-/// Get the user's preferred editor from EDITOR environment variable
 pub fn getEditorName(allocator: Allocator) ![]const u8 {
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
@@ -48,14 +47,30 @@ pub fn getEditorName(allocator: Allocator) ![]const u8 {
     return allocator.dupe(u8, editor);
 }
 
-/// Get paths to config directory and favorites file
+pub fn getUniqueCategories(favorites: ArrayList(Favorite), allocator: Allocator) !ArrayList([]const u8) {
+    var categories = ArrayList([]const u8).init(allocator);
+
+    var seen = std.StringHashMap(void).init(allocator);
+    defer seen.deinit();
+
+    for (favorites.items) |fav| {
+        if (fav.category) |category| {
+            if (!seen.contains(category)) {
+                try seen.put(category, {});
+                try categories.append(try allocator.dupe(u8, category));
+            }
+        }
+    }
+
+    return categories;
+}
+
 pub fn getFavoritesPath(allocator: Allocator) !struct { config_dir: []const u8, favorites_path: []const u8 } {
     const home_dir = try getHomeDirectory(allocator);
     defer allocator.free(home_dir);
 
     const config_dir = try std.fmt.allocPrint(allocator, "{s}{s}", .{ home_dir, CONFIG_DIR_NAME });
 
-    // Create config directory if it doesn't exist
     fs.makeDirAbsolute(config_dir) catch |err| {
         if (err != error.PathAlreadyExists) {
             allocator.free(config_dir);
@@ -71,10 +86,8 @@ pub fn getFavoritesPath(allocator: Allocator) !struct { config_dir: []const u8, 
 pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(Favorite) {
     var favorites = ArrayList(Favorite).init(allocator);
 
-    // Try to initialize the file if it doesn't exist
     try initializeFavoritesFile(path, allocator);
 
-    // Open the file
     const file = fs.openFileAbsolute(path, .{}) catch |err| {
         if (err == error.FileNotFound) {
             return favorites;
@@ -83,22 +96,18 @@ pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(
     };
     defer file.close();
 
-    // Read the content
     const content = try file.readToEndAlloc(allocator, 1024 * 1024);
     defer allocator.free(content);
 
-    // Debug: print the content to see what's there
     const stdout = std.io.getStdOut().writer();
     try stdout.print("JSON content: {s}\n", .{content});
 
-    // If the file is empty or just whitespace, initialize it
     if (content.len == 0 or std.mem.eql(u8, std.mem.trim(u8, content, &std.ascii.whitespace), "")) {
         try initializeFavoritesFile(path, allocator);
         try stdout.print("Initialized empty JSON file\n", .{});
         return favorites;
     }
 
-    // Try to parse, but handle syntax errors gracefully
     const parsed = std.json.parseFromSlice(
         FavoritesData,
         allocator,
@@ -112,7 +121,6 @@ pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(
     };
     defer parsed.deinit();
 
-    // Copy favorites from parsed data
     for (parsed.value.favorites) |fav| {
         try favorites.append(Favorite{
             .path = try allocator.dupe(u8, fav.path),
@@ -125,29 +133,23 @@ pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(
 }
 
 pub fn saveFavorites(path: []const u8, favorites: ArrayList(Favorite), allocator: Allocator) !void {
-    // Create the file
     const file = try fs.createFileAbsolute(path, .{});
     defer file.close();
 
-    // Create an array to hold the favorites
     var favs_array = try allocator.alloc(Favorite, favorites.items.len);
     defer allocator.free(favs_array);
 
-    // Copy the favorites to the array
     for (favorites.items, 0..) |fav, i| {
         favs_array[i] = fav;
     }
 
-    // Create the root object
     const root = FavoritesData{
         .favorites = favs_array,
     };
 
-    // Stringify to JSON with pretty formatting
     try std.json.stringify(root, .{ .whitespace = .indent_4 }, file.writer());
 }
 
-/// Open a file with the user's editor
 pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
 

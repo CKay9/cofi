@@ -8,7 +8,6 @@ const terminal = @import("terminal.zig");
 const utils = @import("utils.zig");
 const ui = @import("ui.zig");
 
-/// Add a new favorite to the list
 fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -17,13 +16,11 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     var path_buffer: [1024]u8 = undefined;
     const file_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
 
-    // Verify the file exists
     fs.accessAbsolute(file_path, .{}) catch {
         try stdout.print("File does not exist: {s}\n", .{file_path});
         return;
     };
 
-    // Check if it's already in favorites
     for (favorites.items) |fav| {
         if (std.mem.eql(u8, fav.path, file_path)) {
             try stdout.print("File is already in favorites\n", .{});
@@ -31,17 +28,14 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
         }
     }
 
-    // Get optional name
     try stdout.print("Enter a name for this config (optional, press Enter to skip): ", .{});
     var name_buffer: [256]u8 = undefined;
     const name_input = (try stdin.readUntilDelimiterOrEof(&name_buffer, '\n')) orelse "";
 
-    // Get optional category
     try stdout.print("Enter a category for this config (optional, press Enter to skip): ", .{});
     var category_buffer: [256]u8 = undefined;
     const category_input = (try stdin.readUntilDelimiterOrEof(&category_buffer, '\n')) orelse "";
 
-    // Create the favorite
     const favorite = utils.Favorite{
         .path = try allocator.dupe(u8, file_path),
         .name = if (name_input.len > 0) try allocator.dupe(u8, name_input) else null,
@@ -53,7 +47,6 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     try stdout.print("Favorite added: {s}\n", .{file_path});
 }
 
-/// Remove a favorite from the list
 fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -63,7 +56,6 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
         return;
     }
 
-    // Create display strings for the UI
     var display_items = ArrayList([]u8).init(allocator);
     defer {
         for (display_items.items) |item| {
@@ -92,7 +84,6 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
         try display_items.append(display);
     }
 
-    // Use the UI module to select a favorite
     const selection = try ui.selectFromList(stdout, stdin, "Available favorites", display_items.items);
 
     if (selection) |idx| {
@@ -116,7 +107,6 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
     }
 }
 
-/// Show and select from favorites list
 fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -126,7 +116,59 @@ fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Alloc
         return;
     }
 
-    // Create display strings for the UI
+    // Get all unique categories
+    var categories = ArrayList([]const u8).init(allocator);
+    defer {
+        for (categories.items) |category| {
+            allocator.free(category);
+        }
+        categories.deinit();
+    }
+
+    // Add "Uncategorized" and "All" options
+    try categories.append(try allocator.dupe(u8, "All"));
+    try categories.append(try allocator.dupe(u8, "Uncategorized"));
+
+    // Track seen categories to avoid duplicates
+    var seen = std.StringHashMap(void).init(allocator);
+    defer seen.deinit();
+    try seen.put("All", {});
+    try seen.put("Uncategorized", {});
+
+    // Add all unique categories from favorites
+    for (favorites.items) |fav| {
+        if (fav.category) |category| {
+            if (!seen.contains(category)) {
+                try seen.put(category, {});
+                try categories.append(try allocator.dupe(u8, category));
+            }
+        }
+    }
+
+    // Convert to non-const string array for UI
+    var display_categories = try ArrayList([]u8).initCapacity(allocator, categories.items.len);
+    defer {
+        for (display_categories.items) |item| {
+            allocator.free(item);
+        }
+        display_categories.deinit();
+    }
+
+    for (categories.items) |category| {
+        try display_categories.append(try allocator.dupe(u8, category));
+    }
+
+    // Simple selection menu for choosing a single category
+    const category_selection = try ui.selectFromList(stdout, stdin, "Select category to filter by", display_categories.items);
+
+    if (category_selection == null) {
+        return; // User pressed 'q'
+    }
+
+    const selected_category_idx = category_selection.?;
+    const selected_category = categories.items[selected_category_idx];
+
+    // Create display list based on selected category
     var display_items = ArrayList([]u8).init(allocator);
     defer {
         for (display_items.items) |item| {
@@ -135,31 +177,61 @@ fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Alloc
         display_items.deinit();
     }
 
-    for (favorites.items) |fav| {
-        var display: []u8 = undefined;
+    var display_to_favorite = ArrayList(usize).init(allocator);
+    defer display_to_favorite.deinit();
 
-        if (fav.name) |name| {
-            if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}] - {s}", .{ name, category, fav.path });
-            } else {
-                display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
-            }
-        } else {
-            if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}]", .{ fav.path, category });
-            } else {
-                display = try allocator.dupe(u8, fav.path);
-            }
+    // Filter logic - much simpler now
+    for (favorites.items, 0..) |fav, fav_idx| {
+        var should_display = false;
+
+        if (std.mem.eql(u8, selected_category, "All")) {
+            // Show everything if "All" is selected
+            should_display = true;
+        } else if (std.mem.eql(u8, selected_category, "Uncategorized")) {
+            // Show only uncategorized items
+            should_display = (fav.category == null);
+        } else if (fav.category) |category| {
+            // Show only items matching the selected category
+            should_display = std.mem.eql(u8, category, selected_category);
         }
 
-        try display_items.append(display);
+        if (should_display) {
+            var display: []u8 = undefined;
+
+            if (fav.name) |name| {
+                if (fav.category) |category| {
+                    display = try std.fmt.allocPrint(allocator, "{s} [{s}] - {s}", .{ name, category, fav.path });
+                } else {
+                    display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
+                }
+            } else {
+                if (fav.category) |category| {
+                    display = try std.fmt.allocPrint(allocator, "{s} [{s}]", .{ fav.path, category });
+                } else {
+                    display = try allocator.dupe(u8, fav.path);
+                }
+            }
+
+            try display_items.append(display);
+            try display_to_favorite.append(fav_idx);
+        }
     }
 
-    // Use the UI module to select a favorite
-    const selection = try ui.selectFromList(stdout, stdin, "Your favorites", display_items.items);
+    if (display_items.items.len == 0) {
+        try stdout.print("\nNo favorites match the selected category. Press any key to continue...\n", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
 
-    if (selection) |idx| {
-        try utils.openWithEditor(favorites.items[idx].path, allocator);
+    const list_title = try std.fmt.allocPrint(allocator, "Favorites - {s}", .{selected_category});
+    defer allocator.free(list_title);
+
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
+
+    if (favorite_selection) |idx| {
+        const original_idx = display_to_favorite.items[idx];
+        try utils.openWithEditor(favorites.items[original_idx].path, allocator);
     }
 }
 
@@ -186,21 +258,149 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
         favorites_list.deinit();
     }
 
-    const menu_items = [_][]const u8{ "Show favorites", "Add favorite", "Remove favorite", "Exit" };
+    const menu_items = [_][]const u8{ "Show favorites", "Add favorite", "Remove favorite", "Categories", "Exit" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "cofi - Config File Manager", &menu_items);
 
         if (selection) |idx| {
             switch (idx) {
-                0 => try showFavorites(&favorites_list, allocator),
+                0 => try showAllFavorites(&favorites_list, allocator),
                 1 => try addFavorite(&favorites_list, paths.favorites_path, allocator),
                 2 => try removeFavorite(&favorites_list, paths.favorites_path, allocator),
-                3 => return,
+                3 => try showCategoriesMenu(&favorites_list, allocator),
+                4 => return,
                 else => {},
             }
         } else {
             return;
         }
+    }
+}
+
+// New function to show all favorites without filtering
+fn showAllFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    if (favorites.items.len == 0) {
+        try stdout.print("No favorites available\n", .{});
+        return;
+    }
+
+    var display_items = ArrayList([]u8).init(allocator);
+    defer {
+        for (display_items.items) |item| {
+            allocator.free(item);
+        }
+        display_items.deinit();
+    }
+
+    for (favorites.items) |fav| {
+        var display: []u8 = undefined;
+
+        if (fav.name) |name| {
+            if (fav.category) |category| {
+                display = try std.fmt.allocPrint(allocator, "{s} [{s}] - {s}", .{ name, category, fav.path });
+            } else {
+                display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
+            }
+        } else {
+            if (fav.category) |category| {
+                display = try std.fmt.allocPrint(allocator, "{s} [{s}]", .{ fav.path, category });
+            } else {
+                display = try allocator.dupe(u8, fav.path);
+            }
+        }
+
+        try display_items.append(display);
+    }
+
+    const favorite_selection = try ui.selectFromList(stdout, stdin, "Your favorites", display_items.items);
+
+    if (favorite_selection) |idx| {
+        try utils.openWithEditor(favorites.items[idx].path, allocator);
+    }
+}
+
+// New function to handle the Categories menu
+fn showCategoriesMenu(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var categories = try utils.getUniqueCategories(favorites.*, allocator);
+    defer {
+        for (categories.items) |category| {
+            allocator.free(category);
+        }
+        categories.deinit();
+    }
+
+    if (categories.items.len == 0) {
+        try stdout.print("No categories available. Add some favorites with categories first.\n", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
+
+    const selected_category = try ui.selectCategory(stdout, stdin, categories.items);
+
+    if (selected_category) |category| {
+        try showFilteredFavorites(favorites, category, allocator);
+    }
+}
+
+// Function to show favorites filtered by a specific category
+fn showFilteredFavorites(favorites: *ArrayList(utils.Favorite), category: []const u8, allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var display_items = ArrayList([]u8).init(allocator);
+    defer {
+        for (display_items.items) |item| {
+            allocator.free(item);
+        }
+        display_items.deinit();
+    }
+
+    var display_to_favorite = ArrayList(usize).init(allocator);
+    defer display_to_favorite.deinit();
+
+    for (favorites.items, 0..) |fav, fav_idx| {
+        var should_display = false;
+
+        if (fav.category) |fav_category| {
+            should_display = std.mem.eql(u8, fav_category, category);
+        }
+
+        if (should_display) {
+            var display: []u8 = undefined;
+
+            if (fav.name) |name| {
+                display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
+            } else {
+                display = try allocator.dupe(u8, fav.path);
+            }
+
+            try display_items.append(display);
+            try display_to_favorite.append(fav_idx);
+        }
+    }
+
+    if (display_items.items.len == 0) {
+        try stdout.print("\nNo favorites with category '{s}'. Press any key to continue...\n", .{category});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
+
+    const list_title = try std.fmt.allocPrint(allocator, "Category: {s}", .{category});
+    defer allocator.free(list_title);
+
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
+
+    if (favorite_selection) |idx| {
+        const original_idx = display_to_favorite.items[idx];
+        try utils.openWithEditor(favorites.items[original_idx].path, allocator);
     }
 }

@@ -1,17 +1,25 @@
 # 🌽 Cornfield (cofi)
 
-A lightweight, fast terminal utility for managing and accessing your configuration files. Stop digging through directories and remembering paths - cofi helps you find and quickly edit your most important config files.
+**A cleaner alternative to maintaining aliases or scripts**
+
+Cofi is a lightweight, fast terminal utility for managing and accessing your configuration files. Stop digging through directories and remembering paths - cofi helps you find and quickly edit your most important config files.
 
 ## Demo
 
 ![cofi in action](./images/cofi.gif)
 
 ## Features
+- A central place to manage all your config files
 - Add paths to config files via the Favorites menu
 - Quickly access favorite config files
 - Interactive terminal UI with vim-like keybindings
 - Directly open any config file on your computer with a short command
 - Automatically uses your favorite editor, as defined in environment variables
+
+A central place to manage all your config files
+Quick access to your most-used configs
+A cleaner alternative to maintaining aliases or scripts
+A faster workflow than navigating with file managers or command line
 
 ## Installation
 

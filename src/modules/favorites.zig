@@ -2,6 +2,7 @@ const std = @import("std");
 const fs = std.fs;
 const process = std.process;
 const ArrayList = std.ArrayList;
+const terminal = @import("terminal.zig");
 
 const ANSI_INVERT_ON = "\x1b[7m";
 const ANSI_INVERT_OFF = "\x1b[27m";
@@ -15,20 +16,6 @@ const BOX_WIDTH = 47;
 const MENU_WIDTH = 43;
 const CONFIG_DIR_NAME = "/.config/cofi";
 const FAVORITES_FILE_NAME = "/favorites.txt";
-
-fn enableRawMode() !void {
-    var raw: termios.termios = undefined;
-    _ = termios.tcgetattr(0, &raw);
-    raw.c_lflag &= ~@as(c_uint, termios.ECHO | termios.ICANON);
-    _ = termios.tcsetattr(0, termios.TCSAFLUSH, &raw);
-}
-
-fn disableRawMode() void {
-    var raw: termios.termios = undefined;
-    _ = termios.tcgetattr(0, &raw);
-    raw.c_lflag |= termios.ECHO | termios.ICANON;
-    _ = termios.tcsetattr(0, termios.TCSAFLUSH, &raw);
-}
 
 fn loadFavorites(path: []const u8, favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !void {
     const file = fs.openFileAbsolute(path, .{}) catch |err| {
@@ -171,8 +158,8 @@ fn removeFavorite(favorites: *ArrayList([]u8), path: []const u8, allocator: std.
     }
 
     var current_selection: usize = 0;
-    try enableRawMode();
-    defer disableRawMode();
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
 
     while (true) {
         try stdout.print(ANSI_CLEAR_SCREEN, .{});
@@ -206,7 +193,7 @@ fn removeFavorite(favorites: *ArrayList([]u8), path: []const u8, allocator: std.
         }
     }
 
-    disableRawMode();
+    terminal.disableRawMode();
 
     const idx = current_selection;
     try stdout.print("Remove {s}? (y/n): ", .{favorites.items[idx]});
@@ -242,8 +229,8 @@ fn showFavorites(favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !voi
     }
 
     var current_selection: usize = 0;
-    try enableRawMode();
-    defer disableRawMode();
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
 
     while (true) {
         try stdout.print(ANSI_CLEAR_SCREEN, .{});
@@ -277,7 +264,7 @@ fn showFavorites(favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !voi
         }
     }
 
-    disableRawMode();
+    terminal.disableRawMode();
 
     const editor = try getEditorName(allocator);
     defer allocator.free(editor);
@@ -322,7 +309,7 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
     var current_selection: usize = 0;
 
     while (true) {
-        try enableRawMode();
+        try terminal.enableRawMode();
         current_selection = 0;
 
         while (true) {
@@ -347,14 +334,14 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
                 'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
                 '\r', '\n' => break,
                 'q' => {
-                    disableRawMode();
+                    terminal.disableRawMode();
                     return;
                 },
                 else => {},
             }
         }
 
-        disableRawMode();
+        terminal.disableRawMode();
 
         switch (current_selection) {
             0 => try showFavorites(&favorites_list, allocator),

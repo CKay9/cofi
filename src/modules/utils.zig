@@ -1,15 +1,34 @@
-// src/modules/utils.zig
 const std = @import("std");
 const fs = std.fs;
 const process = std.process;
 const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 
-// Path constants
 pub const CONFIG_DIR_NAME = "/.config/cofi";
-pub const FAVORITES_FILE_NAME = "/favorites.txt";
+pub const FAVORITES_FILE_NAME = "/favorites.json";
 
-/// Get the user's home directory
-pub fn getHomeDirectory(allocator: std.mem.Allocator) ![]const u8 {
+pub const Favorite = struct {
+    path: []const u8,
+    name: ?[]const u8 = null,
+    category: ?[]const u8 = null,
+};
+
+pub const FavoritesData = struct {
+    favorites: []Favorite,
+};
+
+pub fn initializeFavoritesFile(path: []const u8, _: Allocator) !void {
+    if (fs.accessAbsolute(path, .{})) {
+        return;
+    } else |_| {
+        const file = try fs.createFileAbsolute(path, .{});
+        defer file.close();
+
+        try file.writeAll("{\n    \"favorites\": []\n}");
+    }
+}
+
+pub fn getHomeDirectory(allocator: Allocator) ![]const u8 {
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
 
@@ -21,7 +40,7 @@ pub fn getHomeDirectory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 /// Get the user's preferred editor from EDITOR environment variable
-pub fn getEditorName(allocator: std.mem.Allocator) ![]const u8 {
+pub fn getEditorName(allocator: Allocator) ![]const u8 {
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
 
@@ -30,7 +49,7 @@ pub fn getEditorName(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 /// Get paths to config directory and favorites file
-pub fn getFavoritesPath(allocator: std.mem.Allocator) !struct { config_dir: []const u8, favorites_path: []const u8 } {
+pub fn getFavoritesPath(allocator: Allocator) !struct { config_dir: []const u8, favorites_path: []const u8 } {
     const home_dir = try getHomeDirectory(allocator);
     defer allocator.free(home_dir);
 
@@ -49,39 +68,87 @@ pub fn getFavoritesPath(allocator: std.mem.Allocator) !struct { config_dir: []co
     return .{ .config_dir = config_dir, .favorites_path = favorites_path };
 }
 
-/// Load favorites from file
-pub fn loadFavorites(path: []const u8, favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !void {
+pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(Favorite) {
+    var favorites = ArrayList(Favorite).init(allocator);
+
+    // Try to initialize the file if it doesn't exist
+    try initializeFavoritesFile(path, allocator);
+
+    // Open the file
     const file = fs.openFileAbsolute(path, .{}) catch |err| {
         if (err == error.FileNotFound) {
-            return error.FileNotFound;
+            return favorites;
         }
         return err;
     };
     defer file.close();
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-    var buf: [4096]u8 = undefined;
+    // Read the content
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
 
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        const path_copy = try allocator.dupe(u8, line);
-        try favorites.append(path_copy);
+    // Debug: print the content to see what's there
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("JSON content: {s}\n", .{content});
+
+    // If the file is empty or just whitespace, initialize it
+    if (content.len == 0 or std.mem.eql(u8, std.mem.trim(u8, content, &std.ascii.whitespace), "")) {
+        try initializeFavoritesFile(path, allocator);
+        try stdout.print("Initialized empty JSON file\n", .{});
+        return favorites;
     }
+
+    // Try to parse, but handle syntax errors gracefully
+    const parsed = std.json.parseFromSlice(
+        FavoritesData,
+        allocator,
+        content,
+        .{},
+    ) catch |err| {
+        try stdout.print("Error parsing JSON: {any}\n", .{err});
+        try stdout.print("Reinitializing favorites file\n", .{});
+        try initializeFavoritesFile(path, allocator);
+        return favorites;
+    };
+    defer parsed.deinit();
+
+    // Copy favorites from parsed data
+    for (parsed.value.favorites) |fav| {
+        try favorites.append(Favorite{
+            .path = try allocator.dupe(u8, fav.path),
+            .name = if (fav.name) |name| try allocator.dupe(u8, name) else null,
+            .category = if (fav.category) |category| try allocator.dupe(u8, category) else null,
+        });
+    }
+
+    return favorites;
 }
 
-/// Save favorites to file
-pub fn saveFavorites(path: []const u8, favorites: *ArrayList([]u8), _: std.mem.Allocator) !void {
+pub fn saveFavorites(path: []const u8, favorites: ArrayList(Favorite), allocator: Allocator) !void {
+    // Create the file
     const file = try fs.createFileAbsolute(path, .{});
     defer file.close();
 
-    for (favorites.items) |fav| {
-        try file.writeAll(fav);
-        try file.writeAll("\n");
+    // Create an array to hold the favorites
+    var favs_array = try allocator.alloc(Favorite, favorites.items.len);
+    defer allocator.free(favs_array);
+
+    // Copy the favorites to the array
+    for (favorites.items, 0..) |fav, i| {
+        favs_array[i] = fav;
     }
+
+    // Create the root object
+    const root = FavoritesData{
+        .favorites = favs_array,
+    };
+
+    // Stringify to JSON with pretty formatting
+    try std.json.stringify(root, .{ .whitespace = .indent_4 }, file.writer());
 }
 
 /// Open a file with the user's editor
-pub fn openWithEditor(file_path: []const u8, allocator: std.mem.Allocator) !void {
+pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
 
     const editor = try getEditorName(allocator);

@@ -5,6 +5,7 @@ const core = @import("modules/core.zig");
 const utils = @import("modules/utils.zig");
 const help = @import("modules/help.zig");
 const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -56,21 +57,22 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
     defer allocator.free(paths.config_dir);
     defer allocator.free(paths.favorites_path);
 
-    var favorites_list = ArrayList([]u8).init(allocator);
+    try utils.initializeFavoritesFile(paths.favorites_path, allocator);
+
+    var favorites_list = try utils.loadFavorites(paths.favorites_path, allocator);
     defer {
         for (favorites_list.items) |item| {
-            allocator.free(item);
+            if (item.name) |name| allocator.free(name);
+            if (item.category) |category| allocator.free(category);
+            allocator.free(item.path);
         }
         favorites_list.deinit();
     }
 
-    utils.loadFavorites(paths.favorites_path, &favorites_list, allocator) catch |err| {
-        if (err == error.FileNotFound) {
-            try stdout.print("No favorites found. Add some favorites first.\n", .{});
-            return;
-        }
-        return err;
-    };
+    if (favorites_list.items.len == 0) {
+        try stdout.print("No favorites found. Add some favorites first.\n", .{});
+        return;
+    }
 
     if (index < 1 or index > favorites_list.items.len) {
         try stdout.print("Error: Favorite index {d} out of range. Available range: 1-{d}\n", .{ index, favorites_list.items.len });
@@ -79,5 +81,5 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
 
     const zero_based_index = index - 1;
 
-    try utils.openWithEditor(favorites_list.items[zero_based_index], allocator);
+    try utils.openWithEditor(favorites_list.items[zero_based_index].path, allocator);
 }

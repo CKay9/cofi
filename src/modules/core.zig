@@ -3,6 +3,7 @@ const fs = std.fs;
 const process = std.process;
 const ArrayList = std.ArrayList;
 const terminal = @import("terminal.zig");
+const utils = @import("utils.zig");
 
 const ANSI_INVERT_ON = "\x1b[7m";
 const ANSI_INVERT_OFF = "\x1b[27m";
@@ -46,44 +47,6 @@ fn saveFavorites(path: []const u8, favorites: *ArrayList([]u8), _: std.mem.Alloc
     }
 }
 
-fn getHomeDirectory(allocator: std.mem.Allocator) ![]const u8 {
-    var env_map = try process.getEnvMap(allocator);
-    defer env_map.deinit();
-
-    const home_dir = env_map.get("HOME") orelse {
-        return error.HomeNotFound;
-    };
-
-    return allocator.dupe(u8, home_dir);
-}
-
-fn getEditorName(allocator: std.mem.Allocator) ![]const u8 {
-    var env_map = try process.getEnvMap(allocator);
-    defer env_map.deinit();
-
-    const editor = env_map.get("EDITOR") orelse "nano";
-    return allocator.dupe(u8, editor);
-}
-
-fn getFavoritesPath(allocator: std.mem.Allocator) !struct { config_dir: []const u8, favorites_path: []const u8 } {
-    const home_dir = try getHomeDirectory(allocator);
-    defer allocator.free(home_dir);
-
-    const config_dir = try std.fmt.allocPrint(allocator, "{s}{s}", .{ home_dir, CONFIG_DIR_NAME });
-
-    fs.makeDirAbsolute(config_dir) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            allocator.free(config_dir);
-            return err;
-        }
-    };
-
-    const favorites_path = try std.fmt.allocPrint(allocator, "{s}{s}", .{ config_dir, FAVORITES_FILE_NAME });
-
-    return .{ .config_dir = config_dir, .favorites_path = favorites_path };
-}
-
-// Fixed renderMenuItem - selection highlighting is now properly contained
 fn renderMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected: bool, width: usize) !void {
     const totalPadding = width - item.len;
     const leftPadding = totalPadding / 2;
@@ -266,7 +229,7 @@ fn showFavorites(favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !voi
 
     terminal.disableRawMode();
 
-    const editor = try getEditorName(allocator);
+    const editor = try utils.getEditorName(allocator);
     defer allocator.free(editor);
 
     try stdout.print("Opening {s} with {s}...\n", .{ favorites.items[current_selection], editor });
@@ -283,7 +246,7 @@ fn showFavorites(favorites: *ArrayList([]u8), allocator: std.mem.Allocator) !voi
 pub fn manageFavorites(allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
 
-    const paths = getFavoritesPath(allocator) catch |err| {
+    const paths = utils.getFavoritesPath(allocator) catch |err| {
         try stdout.print("Error setting up config directory: {any}\n", .{err});
         return;
     };

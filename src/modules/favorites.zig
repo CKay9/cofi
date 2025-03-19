@@ -79,7 +79,7 @@ fn getEditorName(allocator: std.mem.Allocator) ![]const u8 {
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
 
-    const editor = env_map.get("EDITOR") orelse "vi";
+    const editor = env_map.get("EDITOR") orelse "nano";
     return allocator.dupe(u8, editor);
 }
 

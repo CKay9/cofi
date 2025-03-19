@@ -1,7 +1,7 @@
 const std = @import("std");
 const process = std.process;
 const fs = std.fs;
-const favorites = @import("modules/favorites.zig");
+const core = @import("modules/core.zig");
 const help = @import("modules/help.zig");
 const ArrayList = std.ArrayList;
 
@@ -49,8 +49,7 @@ pub fn main() !void {
             try openSpecificFavorite(allocator, index);
         }
     } else {
-        // No args, just show the favorites menu
-        try favorites.manageFavorites(allocator);
+        try core.manageFavorites(allocator);
     }
 }
 
@@ -78,7 +77,6 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
     const favorites_path = try std.fmt.allocPrint(allocator, "{s}/favorites.txt", .{config_dir});
     defer allocator.free(favorites_path);
 
-    // Load favorites
     var favorites_list = ArrayList([]u8).init(allocator);
     defer {
         for (favorites_list.items) |item| {
@@ -87,7 +85,6 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
         favorites_list.deinit();
     }
 
-    // Load favorites if they exist
     const file = fs.openFileAbsolute(favorites_path, .{}) catch |err| {
         if (err == error.FileNotFound) {
             try stdout.print("No favorites found. Add some favorites first.\n", .{});
@@ -112,11 +109,9 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
         return;
     }
 
-    // Convert from 1-based (user-friendly) to 0-based (internal)
     const zero_based_index = index - 1;
 
-    // Get the editor from environment
-    const editor = env_map.get("EDITOR") orelse "vi";
+    const editor = env_map.get("EDITOR") orelse "nano";
 
     try stdout.print("Opening {s} with {s}...\n", .{ favorites_list.items[zero_based_index], editor });
 

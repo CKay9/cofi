@@ -9,22 +9,21 @@ Cofi is a lightweight, fast terminal utility for managing and accessing your con
 ![cofi in action](./images/cofi.gif)
 
 ## Features
-- A central place to manage all your config files
-- Add paths to config files via the Favorites menu
-- Quickly access favorite config files
-- Interactive terminal UI with vim-like keybindings
-- Directly open any config file on your computer with a short command
-- Automatically uses your favorite editor, as defined in environment variables
 
-A central place to manage all your config files
-Quick access to your most-used configs
-A cleaner alternative to maintaining aliases or scripts
-A faster workflow than navigating with file managers or command line
+- Central management of all your configuration files
+- Interactive terminal UI with vim-like keybindings (j/k for navigation)
+- Add, view, and remove favorite config files via the interactive menu
+- Add custom names to your config files for easier identification
+- Organize configs with optional categories
+- Directly open a specific favorite by index (e.g., `cofi 1`)
+- Auto-detection of your preferred editor from environment variables
+- Clean, visual menus with intuitive navigation
 
 ## Installation
 
 ### Prerequisites
 - Zig 0.15.0-dev or later
+- A Unix-like operating system (Linux, macOS)
 
 ### Installation from Source
 ```bash
@@ -41,10 +40,44 @@ cp zig-out/bin/cofi ~/bin/
 chmod +x ~/bin/cofi
 ```
 
-Once you have added config files, directly open them with a short command. 
-To access the first item in the list, simply type:
-```bash
-cofi 1
-```
-**More features coming soon!**
+### Adding to PATH
+To use cofi from anywhere, make sure `~/bin` is in your PATH by adding this to your shell configuration file:
 
+```bash
+export PATH="$HOME/bin:$PATH"
+```
+
+## Usage
+
+### Interactive Mode
+To launch the interactive menu:
+```bash
+cofi
+```
+
+### Direct Access
+To directly open a favorite config file by its index:
+```bash
+cofi 1  # Opens the first config file in your favorites
+```
+
+### Other Commands
+```bash
+cofi -h, --help     # Show help information
+cofi -v, --version  # Display version information
+```
+
+### Keyboard Navigation
+- `j` - Move down in menus
+- `k` - Move up in menus
+- `Enter` - Select item
+- `q` - Quit/cancel current menu
+
+## Configuration
+Cofi stores your favorites in `~/.config/cofi/favorites.json`. This file is automatically created on first run.
+
+## Contributing
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

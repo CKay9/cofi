@@ -141,12 +141,14 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
 
         if (i == current_selection) {
             try stdout.print("  {s}{d}:{s} {s}{s}{s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, ANSI_CYAN, parts.name, ANSI_RESET });
-
             try stdout.print("  ➤   {s}{s}{s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
         } else {
             try stdout.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
-
             try stdout.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+        }
+
+        if (i < items.len - 1) {
+            try stdout.print("  {s}· · · · · · · · · · · · · · · · · · · · · · · · · · · ·{s}\n", .{ ANSI_GRAY, ANSI_RESET });
         }
     }
 

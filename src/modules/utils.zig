@@ -138,7 +138,7 @@ pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(
     defer allocator.free(content);
 
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("JSON content: {s}\n", .{content});
+    // try stdout.print("JSON content: {s}\n", .{content});
 
     if (content.len == 0 or std.mem.eql(u8, std.mem.trim(u8, content, &std.ascii.whitespace), "")) {
         try initializeFavoritesFile(path, allocator);

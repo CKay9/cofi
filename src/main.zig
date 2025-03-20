@@ -13,6 +13,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
 
     const args = try process.argsAlloc(allocator);
     defer process.argsFree(allocator, args);
@@ -24,11 +25,8 @@ pub fn main() !void {
             if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
                 try help.printHelp(stdout);
                 return;
-            } else if (std.mem.eql(u8, arg, "-l") or std.mem.eql(u8, arg, "--list")) {
-                try listFavorites(allocator);
-                return;
             } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
-                try stdout.print("cofi version 0.1.2-pre-alpha\n", .{});
+                try stdout.print("cofi version 0.3.0\n", .{});
                 return;
             } else {
                 const error_msg = try std.fmt.allocPrint(allocator, "Unknown flag '{s}'", .{arg});
@@ -40,9 +38,12 @@ pub fn main() !void {
             const index_str = if (arg.len > 0 and arg[0] == '-') arg[1..] else arg;
 
             const index = std.fmt.parseInt(usize, index_str, 10) catch {
-                const error_msg = try std.fmt.allocPrint(allocator, "Invalid argument '{s}'", .{arg});
+                const error_msg = try std.fmt.allocPrint(allocator, "Invalid argument '{s}'. Expected a number.", .{arg});
                 defer allocator.free(error_msg);
                 try help.printErrorAndHelp(stdout, error_msg);
+                try stdout.print("Press any key to continue...", .{});
+                var key_buffer: [1]u8 = undefined;
+                _ = try stdin.read(&key_buffer);
                 return;
             };
 
@@ -101,6 +102,7 @@ fn listFavorites(allocator: std.mem.Allocator) !void {
 
 fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
     const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
 
     const paths = try utils.getFavoritesPath(allocator);
     defer allocator.free(paths.config_dir);
@@ -120,11 +122,17 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
 
     if (favorites_list.items.len == 0) {
         try stdout.print("No favorites found. Add some favorites first.\n", .{});
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
         return;
     }
 
     if (index < 1 or index > favorites_list.items.len) {
         try stdout.print("Error: Favorite index {d} out of range. Available range: 1-{d}\n", .{ index, favorites_list.items.len });
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
         return;
     }
 

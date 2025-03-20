@@ -16,17 +16,59 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     var path_buffer: [1024]u8 = undefined;
     const input_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
 
-    const file_path = try utils.expandTildePath(input_path, allocator);
-    defer allocator.free(file_path);
-
-    fs.accessAbsolute(file_path, .{}) catch {
-        try stdout.print("File does not exist: {s}\n", .{file_path});
+    // First try to expand the path (handling ~/ if present)
+    var expanded_path: []const u8 = undefined;
+    expanded_path = utils.expandTildePath(input_path, allocator) catch |err| {
+        try stdout.print("\nError: Invalid path format '{s}': {}\n", .{ input_path, err });
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
         return;
     };
+    defer allocator.free(expanded_path);
 
+    // Check if the path is absolute
+    if (!fs.path.isAbsolute(expanded_path)) {
+        try stdout.print("\nError: Path must be absolute (start with '/' or '~/')\n", .{});
+        try stdout.print("You entered: '{s}'\n", .{input_path});
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
+
+    // Now that we have a valid absolute path, check if the file exists
+    const file_exists = blk: {
+        var file = fs.openFileAbsolute(expanded_path, .{}) catch |err| {
+            if (err == error.FileNotFound) {
+                break :blk false;
+            } else {
+                try stdout.print("\nError accessing file: {}\n", .{err});
+                try stdout.print("Press any key to continue...", .{});
+                var key_buffer: [1]u8 = undefined;
+                _ = try stdin.read(&key_buffer);
+                return;
+            }
+        };
+        defer file.close();
+        break :blk true;
+    };
+
+    if (!file_exists) {
+        try stdout.print("\nError: File '{s}' does not exist\n", .{expanded_path});
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
+
+    // Check if the file is already in favorites
     for (favorites.items) |fav| {
-        if (std.mem.eql(u8, fav.path, file_path)) {
-            try stdout.print("File is already in favorites\n", .{});
+        if (std.mem.eql(u8, fav.path, expanded_path)) {
+            try stdout.print("\nFile is already in favorites.\n", .{});
+            try stdout.print("Press any key to continue...", .{});
+            var key_buffer: [1]u8 = undefined;
+            _ = try stdin.read(&key_buffer);
             return;
         }
     }
@@ -40,14 +82,17 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     const category_input = (try stdin.readUntilDelimiterOrEof(&category_buffer, '\n')) orelse "";
 
     const favorite = utils.Favorite{
-        .path = try allocator.dupe(u8, file_path),
+        .path = try allocator.dupe(u8, expanded_path),
         .name = if (name_input.len > 0) try allocator.dupe(u8, name_input) else null,
         .category = if (category_input.len > 0) try allocator.dupe(u8, category_input) else null,
     };
 
     try favorites.append(favorite);
     try utils.saveFavorites(path, favorites.*, allocator);
-    try stdout.print("File added: {s}\n", .{file_path});
+    try stdout.print("\nFavorite added: {s}\n", .{expanded_path});
+    try stdout.print("Press any key to continue...", .{});
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
 }
 
 fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocator: std.mem.Allocator) !void {

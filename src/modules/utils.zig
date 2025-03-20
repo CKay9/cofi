@@ -190,13 +190,39 @@ pub fn saveFavorites(path: []const u8, favorites: ArrayList(Favorite), allocator
 
 pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    // Expand the path if it starts with ~
+    const expanded_path = try expandTildePath(file_path, allocator);
+    defer allocator.free(expanded_path);
+
+    // Check if file exists before attempting to open
+    const file_exists = blk: {
+        var file = fs.openFileAbsolute(expanded_path, .{}) catch |err| {
+            if (err == error.FileNotFound) {
+                break :blk false;
+            } else {
+                try stdout.print("\nError accessing file: {}\n", .{err});
+                try stdout.print("Press any key to continue...", .{});
+                var key_buffer: [1]u8 = undefined;
+                _ = try stdin.read(&key_buffer);
+                return;
+            }
+        };
+        defer file.close();
+        break :blk true;
+    };
+
+    if (!file_exists) {
+        try stdout.print("\nError: File '{s}' no longer exists or is not accessible.\n", .{expanded_path});
+        try stdout.print("Press any key to continue...", .{});
+        var key_buffer: [1]u8 = undefined;
+        _ = try stdin.read(&key_buffer);
+        return;
+    }
 
     const editor = try getEditorName(allocator);
     defer allocator.free(editor);
-
-    // Expandiere den Pfad, falls er mit ~ beginnt
-    const expanded_path = try expandTildePath(file_path, allocator);
-    defer allocator.free(expanded_path);
 
     try stdout.print("Opening {s} with {s}...\n", .{ expanded_path, editor });
 

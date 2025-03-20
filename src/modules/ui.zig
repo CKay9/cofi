@@ -3,8 +3,8 @@ const terminal = @import("terminal.zig");
 const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 
-pub const BOX_WIDTH = 49;
-pub const MENU_WIDTH = 43;
+pub const BOX_WIDTH = 58;
+pub const MENU_WIDTH = 52;
 pub const BORDER_WIDTH = BOX_WIDTH;
 
 pub const ANSI_INVERT_ON = "\x1b[7m";
@@ -61,14 +61,14 @@ pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !
 
 pub fn renderControls(stdout: std.fs.File.Writer, show_quit: bool) !void {
     if (show_quit) {
-        try stdout.print("│ {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Quit │\n", .{
+        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Quit     │\n", .{
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
         });
     } else {
-        try stdout.print("│ {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back │\n", .{
+        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back     │\n", .{
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
@@ -134,20 +134,19 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
 
     for (items, 0..) |item, i| {
         var parts = utils.splitPathAndName(item);
-
         const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
             std.fmt.bufPrint(&path_buffer, "~{s}", .{parts.path[home_dir.len..]}) catch parts.path
         else
             parts.path;
 
         if (i == current_selection) {
-            try stdout.print("    {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+            try stdout.print("  {s}{d}:{s} {s}{s}{s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, ANSI_CYAN, parts.name, ANSI_RESET });
 
-            try stdout.print("       {s}⮑  {s} {s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
+            try stdout.print("  ➤   {s}{s}{s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
         } else {
-            try stdout.print("    {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+            try stdout.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
 
-            try stdout.print("          {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+            try stdout.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
     }
 
@@ -174,7 +173,6 @@ pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, cat
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
 
-        // Handle single key presses
         if (bytes_read == 1) {
             switch (key_buffer[0]) {
                 'j' => current_selection = @min(current_selection + 1, categories.len - 1),
@@ -183,9 +181,7 @@ pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, cat
                 'q' => return null,
                 else => {},
             }
-        }
-        // Handle arrow keys (escape sequences)
-        else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
                 'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
                 'B' => current_selection = @min(current_selection + 1, categories.len - 1), // Down arrow
@@ -207,7 +203,6 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
 
-        // Handle single key presses
         if (bytes_read == 1) {
             switch (key_buffer[0]) {
                 'j' => current_selection = @min(current_selection + 1, menu_items.len - 1),
@@ -216,9 +211,7 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
                 'q' => return null,
                 else => {},
             }
-        }
-        // Handle arrow keys (escape sequences)
-        else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
                 'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
                 'B' => current_selection = @min(current_selection + 1, menu_items.len - 1), // Down arrow
@@ -245,7 +238,6 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
 
-        // Handle single key presses
         if (bytes_read == 1) {
             switch (key_buffer[0]) {
                 'j' => current_selection = @min(current_selection + 1, items.len - 1),
@@ -254,9 +246,7 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
                 'q' => return null,
                 else => {},
             }
-        }
-        // Handle arrow keys (escape sequences)
-        else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
                 'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
                 'B' => current_selection = @min(current_selection + 1, items.len - 1), // Down arrow

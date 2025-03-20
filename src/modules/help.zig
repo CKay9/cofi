@@ -7,11 +7,13 @@ pub const BASIC_HELP =
     \\USAGE:
     \\  cofi                Start the interactive favorites menu
     \\  cofi <number>       Open the specified favorite directly (e.g., cofi 1)
+    \\  cofi -l, --list     Quick view of all files registered
     \\  cofi -v, --version  Display the currently installed version number
     \\  cofi -h, --help     Show this help message
     \\
     \\NAVIGATION:
-    \\  j/k                 Navigate up/down in menus
+    \\  j or ↓              Navigate down in menus
+    \\  k or ↑              Navigate up in menus
     \\  Enter               Select item
     \\  q                   Quit/cancel current menu
     \\

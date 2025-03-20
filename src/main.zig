@@ -24,6 +24,9 @@ pub fn main() !void {
             if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
                 try help.printHelp(stdout);
                 return;
+            } else if (std.mem.eql(u8, arg, "-l") or std.mem.eql(u8, arg, "--list")) {
+                try listFavorites(allocator);
+                return;
             } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
                 try stdout.print("cofi version 0.1.2-pre-alpha\n", .{});
                 return;
@@ -47,6 +50,52 @@ pub fn main() !void {
         }
     } else {
         try core.manageFavorites(allocator);
+    }
+}
+
+fn listFavorites(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+
+    const paths = try utils.getFavoritesPath(allocator);
+    defer allocator.free(paths.config_dir);
+    defer allocator.free(paths.favorites_path);
+
+    try utils.initializeFavoritesFile(paths.favorites_path, allocator);
+
+    var favorites_list = try utils.loadFavorites(paths.favorites_path, allocator);
+    defer {
+        for (favorites_list.items) |item| {
+            if (item.name) |name| allocator.free(name);
+            if (item.category) |category| allocator.free(category);
+            allocator.free(item.path);
+        }
+        favorites_list.deinit();
+    }
+
+    if (favorites_list.items.len == 0) {
+        try stdout.print("No favorites found. Add some favorites first.\n", .{});
+        return;
+    }
+
+    try stdout.print("🌽 cofi - Favorites List 🌽\n\n", .{});
+
+    for (favorites_list.items, 0..) |fav, i| {
+        const index = i + 1;
+
+        if (fav.name) |name| {
+            if (fav.category) |category| {
+                try stdout.print("{d}. {s} [{s}]\n", .{ index, name, category });
+            } else {
+                try stdout.print("{d}. {s}\n", .{ index, name });
+            }
+        } else {
+            const basename = std.fs.path.basename(fav.path);
+            if (fav.category) |category| {
+                try stdout.print("{d}. {s} [{s}]\n", .{ index, basename, category });
+            } else {
+                try stdout.print("{d}. {s}\n", .{ index, basename });
+            }
+        }
     }
 }
 

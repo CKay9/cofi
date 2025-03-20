@@ -17,6 +17,25 @@ pub const FavoritesData = struct {
     favorites: []Favorite,
 };
 
+pub const ItemParts = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
+pub fn splitPathAndName(item: []const u8) ItemParts {
+    if (std.mem.indexOf(u8, item, " - ")) |dash_index| {
+        return ItemParts{
+            .name = item[0..dash_index],
+            .path = item[dash_index + 3 ..],
+        };
+    }
+
+    return ItemParts{
+        .name = item,
+        .path = "",
+    };
+}
+
 pub fn expandTildePath(path: []const u8, allocator: Allocator) ![]const u8 {
     if (path.len == 0 or path[0] != '~') {
         return allocator.dupe(u8, path);

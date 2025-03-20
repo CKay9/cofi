@@ -1,16 +1,60 @@
 const std = @import("std");
 const terminal = @import("terminal.zig");
+const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 
 pub const BOX_WIDTH = 49;
 pub const MENU_WIDTH = 43;
-pub const BORDER_WIDTH = BOX_WIDTH; // Use the same width for all borders
+pub const BORDER_WIDTH = BOX_WIDTH;
 
 pub const ANSI_INVERT_ON = "\x1b[7m";
 pub const ANSI_INVERT_OFF = "\x1b[27m";
+
 pub const ANSI_BOLD_YELLOW = "\x1b[1;33m";
+pub const ANSI_DIM = "\x1b[2m";
+pub const ANSI_GRAY = "\x1b[38;5;242m";
+pub const ANSI_LIGHT_GRAY = "\x1b[38;5;250m";
+pub const ANSI_MEDIUM_GRAY = "\x1b[38;5;245m";
+pub const ANSI_BLUE = "\x1b[34m";
+pub const ANSI_CYAN = "\x1b[36m";
+pub const ANSI_FILL_LINE = "\x1b[K";
+
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
+
+const ItemParts = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
+fn splitPathAndName(item: []const u8) ItemParts {
+    if (std.mem.indexOf(u8, item, " - ")) |dash_index| {
+        return ItemParts{
+            .name = item[0..dash_index],
+            .path = item[dash_index + 3 ..],
+        };
+    }
+
+    return ItemParts{
+        .name = item,
+        .path = "",
+    };
+}
+
+pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
+    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
+    try stdout.print("🌽 {s} 🌽\n\n", .{title});
+
+    try renderBorder(stdout, true, false);
+
+    for (menu_items, 0..) |item, i| {
+        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
+    }
+
+    try renderBorder(stdout, false, false);
+    try renderControls(stdout, false);
+    try renderBorder(stdout, false, true);
+}
 
 pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !void {
     if (is_top) {
@@ -34,7 +78,6 @@ pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !
     }
 }
 
-// Unified function to render controls
 pub fn renderControls(stdout: std.fs.File.Writer, show_quit: bool) !void {
     if (show_quit) {
         try stdout.print("│ {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Quit │\n", .{
@@ -53,7 +96,6 @@ pub fn renderControls(stdout: std.fs.File.Writer, show_quit: bool) !void {
     }
 }
 
-// Updated renderMenuItem to ensure consistent width
 pub fn renderMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected: bool, width: usize) !void {
     const totalPadding = width - item.len;
     const leftPadding = totalPadding / 2;
@@ -103,40 +145,33 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
     try stdout.print("{s}:\n\n", .{title});
 
-    var max_length: usize = 0;
-    for (items) |item| {
-        max_length = @max(max_length, item.len);
-    }
+    const allocator = std.heap.page_allocator;
+    const home_dir = utils.getHomeDirectory(allocator) catch "";
+    defer if (home_dir.len > 0) allocator.free(home_dir);
+
+    var path_buffer: [1024]u8 = undefined;
 
     for (items, 0..) |item, i| {
+        var parts = splitPathAndName(item);
+
+        const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
+            std.fmt.bufPrint(&path_buffer, "~{s}", .{parts.path[home_dir.len..]}) catch parts.path
+        else
+            parts.path;
+
         if (i == current_selection) {
-            try stdout.print("  {s}{d}: {s}", .{ ANSI_INVERT_ON, i + 1, item });
-            for (0..max_length - item.len) |_| {
-                try stdout.print(" ", .{});
-            }
-            try stdout.print("{s}\n", .{ANSI_INVERT_OFF});
+            try stdout.print("    {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+
+            try stdout.print("       {s}⮑  {s} {s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
         } else {
-            try stdout.print("    {d}: {s}\n", .{ i + 1, item });
+            try stdout.print("    {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+
+            try stdout.print("          {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
     }
 
     try stdout.print("\n", .{});
     try renderBorder(stdout, true, false);
-    try renderControls(stdout, false);
-    try renderBorder(stdout, false, true);
-}
-
-pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
-    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
-    try stdout.print("🌽 {s} 🌽\n\n", .{title});
-
-    try renderBorder(stdout, true, false);
-
-    for (menu_items, 0..) |item, i| {
-        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
-    }
-
-    try renderBorder(stdout, false, false);
     try renderControls(stdout, false);
     try renderBorder(stdout, false, true);
 }

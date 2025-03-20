@@ -14,7 +14,10 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
 
     try stdout.print("Enter the path to the configuration file: ", .{});
     var path_buffer: [1024]u8 = undefined;
-    const file_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
+    const input_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
+
+    const file_path = try utils.expandTildePath(input_path, allocator);
+    defer allocator.free(file_path);
 
     fs.accessAbsolute(file_path, .{}) catch {
         try stdout.print("File does not exist: {s}\n", .{file_path});

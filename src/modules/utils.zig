@@ -17,6 +17,25 @@ pub const FavoritesData = struct {
     favorites: []Favorite,
 };
 
+pub fn expandTildePath(path: []const u8, allocator: Allocator) ![]const u8 {
+    if (path.len == 0 or path[0] != '~') {
+        return allocator.dupe(u8, path);
+    }
+
+    const home_dir = try getHomeDirectory(allocator);
+    defer allocator.free(home_dir);
+
+    if (path.len == 1) {
+        return allocator.dupe(u8, home_dir);
+    }
+
+    if (path.len > 1 and path[1] == '/') {
+        return std.fmt.allocPrint(allocator, "{s}{s}", .{ home_dir, path[1..] });
+    }
+
+    return error.UnsupportedTildeExpansion;
+}
+
 pub fn initializeFavoritesFile(path: []const u8, _: Allocator) !void {
     if (fs.accessAbsolute(path, .{})) {
         return;
@@ -156,9 +175,13 @@ pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     const editor = try getEditorName(allocator);
     defer allocator.free(editor);
 
-    try stdout.print("Opening {s} with {s}...\n", .{ file_path, editor });
+    // Expandiere den Pfad, falls er mit ~ beginnt
+    const expanded_path = try expandTildePath(file_path, allocator);
+    defer allocator.free(expanded_path);
 
-    var child = std.process.Child.init(&[_][]const u8{ editor, file_path }, allocator);
+    try stdout.print("Opening {s} with {s}...\n", .{ expanded_path, editor });
+
+    var child = std.process.Child.init(&[_][]const u8{ editor, expanded_path }, allocator);
 
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Inherit;

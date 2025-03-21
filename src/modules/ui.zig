@@ -21,6 +21,7 @@ pub const ANSI_FILL_LINE = "\x1b[K";
 
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
+pub const LIST_VISIBLE_ITEMS = 7;
 
 var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
 
@@ -124,7 +125,7 @@ pub fn renderMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []c
     try renderBorder(stdout, false, true);
 }
 
-pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize) !void {
+pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, visible_items_count: usize) !void {
     output_buffer.clearRetainingCapacity();
     var writer = output_buffer.writer();
 
@@ -137,7 +138,24 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
 
     var path_buffer: [1024]u8 = undefined;
 
-    for (items, 0..) |item, i| {
+    const half_visible = visible_items_count / 2;
+    var start_idx: usize = 0;
+    var end_idx: usize = items.len;
+
+    if (items.len > visible_items_count) {
+        if (current_selection > half_visible) {
+            start_idx = current_selection - half_visible;
+        }
+        end_idx = start_idx + visible_items_count;
+        if (end_idx > items.len) {
+            end_idx = items.len;
+            start_idx = if (items.len > visible_items_count) items.len - visible_items_count else 0;
+        }
+    }
+
+    // Display the visible items
+    for (start_idx..end_idx) |i| {
+        const item = items[i];
         var parts = utils.splitPathAndName(item);
         const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
             std.fmt.bufPrint(&path_buffer, "~{s}", .{parts.path[home_dir.len..]}) catch parts.path
@@ -152,12 +170,22 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             try writer.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
 
-        if (i < items.len - 1) {
+        if (i < end_idx - 1) {
             try writer.print("  {s}· · · · · · · · · · · · · · · · · · · · · · · · · · · ·{s}\n", .{ ANSI_GRAY, ANSI_RESET });
         }
     }
 
     try writer.print("\n", .{});
+
+    // Show both indicators in the same area after the list
+    try writer.print("  Item {d} of {d}", .{ current_selection + 1, items.len });
+    if (start_idx > 0) {
+        try writer.print("  {s}(↑ more above){s}", .{ ANSI_MEDIUM_GRAY, ANSI_RESET });
+    }
+    if (end_idx < items.len) {
+        try writer.print("  {s}(↓ more below){s}", .{ ANSI_MEDIUM_GRAY, ANSI_RESET });
+    }
+    try writer.print("\n\n", .{});
 
     try writer.print("╭", .{});
     for (0..BORDER_WIDTH - 2) |_| {
@@ -258,7 +286,7 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     defer terminal.disableRawMode();
 
     while (true) {
-        try renderList(stdout, title, items, current_selection);
+        try renderList(stdout, title, items, current_selection, LIST_VISIBLE_ITEMS);
 
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
@@ -267,6 +295,8 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
             switch (key_buffer[0]) {
                 'j' => current_selection = @min(current_selection + 1, items.len - 1),
                 'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'g' => current_selection = 0,
+                'G' => current_selection = items.len - 1,
                 '\r', '\n' => return current_selection,
                 'q' => return null,
                 else => {},

@@ -173,8 +173,15 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             parts.path;
 
         if (i == current_selection) {
-            try writer.print("  {s}{d}:{s} {s}{s}{s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, ANSI_CYAN, parts.name, ANSI_RESET });
-            try writer.print("  ➤   {s}{s}{s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
+            try writer.print("  {s}{s}{d}: {s}{s}{s}\n", .{
+                ANSI_CYAN, // Cyan color
+                ANSI_INVERT_ON, // Start inverting the entire line
+                i + 1, // The item number
+                parts.name, // The name part
+                ANSI_FILL_LINE, // Fill to end of line with background color
+                ANSI_INVERT_OFF, // Stop inverting
+            });
+            try writer.print("    {s}╰─{s}{s}\n", .{ ANSI_CYAN, display_path, ANSI_RESET });
         } else {
             try writer.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
             try writer.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });

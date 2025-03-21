@@ -168,7 +168,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
         const item = items[i];
         var parts = utils.splitPathAndName(item);
         const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
-            std.fmt.bufPrint(&path_buffer, "~{s}", .{parts.path[home_dir.len..]}) catch parts.path
+            std.fmt.bufPrint(&path_buffer, "{s}", .{parts.path[home_dir.len..]}) catch parts.path
         else
             parts.path;
 
@@ -184,7 +184,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             try writer.print("    {s}╰─{s}{s}\n", .{ ANSI_CYAN, display_path, ANSI_RESET });
         } else {
             try writer.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
-            try writer.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+            try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
 
         if (i < end_idx - 1) {

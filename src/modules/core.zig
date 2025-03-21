@@ -12,7 +12,7 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    const menu_items = [_][]const u8{ "Editor", "Back" };
+    const menu_items = [_][]const u8{ "Editor", "List Items Count", "Back" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "Settings", &menu_items);
@@ -20,7 +20,8 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
         if (selection) |idx| {
             switch (idx) {
                 0 => try changeEditorSetting(allocator),
-                1 => return,
+                1 => try changeListVisibleItemsSetting(allocator),
+                2 => return,
                 else => {},
             }
         } else {
@@ -87,7 +88,6 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     var path_buffer: [1024]u8 = undefined;
     const input_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
 
-    // First try to expand the path (handling ~/ if present)
     var expanded_path: []const u8 = undefined;
     expanded_path = utils.expandTildePath(input_path, allocator) catch |err| {
         try stdout.print("\nError: Invalid path format '{s}': {}\n", .{ input_path, err });
@@ -221,6 +221,52 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
             try stdout.print("Removal cancelled\n", .{});
         }
     }
+}
+
+pub fn changeListVisibleItemsSetting(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    const current_count = ui.LIST_VISIBLE_ITEMS;
+
+    try stdout.print("Current number of visible list items: {d}\n", .{current_count});
+    try stdout.print("Enter new number (3-15, leave empty for default 7): ", .{});
+
+    var buffer: [256]u8 = undefined;
+    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse "";
+
+    if (input.len > 0) {
+        const new_count = std.fmt.parseInt(u8, input, 10) catch |err| {
+            try stdout.print("\nInvalid input: {}\n", .{err});
+            try stdout.print("Press any key to continue...", .{});
+            var key_buffer: [1]u8 = undefined;
+            _ = try stdin.read(&key_buffer);
+            return;
+        };
+
+        if (new_count < 3 or new_count > 15) {
+            try stdout.print("\nValue must be between 3 and 15.\n", .{});
+            try stdout.print("Press any key to continue...", .{});
+            var key_buffer: [1]u8 = undefined;
+            _ = try stdin.read(&key_buffer);
+            return;
+        }
+
+        settings.list_visible_items = new_count;
+        ui.LIST_VISIBLE_ITEMS = new_count;
+    } else {
+        settings.list_visible_items = null; // Reset to default
+        ui.LIST_VISIBLE_ITEMS = 7; // Reset to default value
+    }
+
+    try utils.saveSettings(allocator, settings);
+
+    try stdout.print("\nVisible list items updated to {d}. Press any key to continue...", .{ui.LIST_VISIBLE_ITEMS});
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
 }
 
 fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Allocator) !void {

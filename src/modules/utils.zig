@@ -24,6 +24,7 @@ pub const ItemParts = struct {
 
 pub const Settings = struct {
     editor: ?[]const u8 = null,
+    list_visible_items: ?u8 = null,
 
     pub fn deinit(self: *Settings, allocator: std.mem.Allocator) void {
         if (self.editor) |editor| {

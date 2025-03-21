@@ -4,6 +4,7 @@ const fs = std.fs;
 const core = @import("modules/core.zig");
 const utils = @import("modules/utils.zig");
 const help = @import("modules/help.zig");
+const ui = @import("modules/ui.zig");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -11,6 +12,8 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
+
+    try ui.initializeListVisibleItems(allocator);
 
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();

@@ -21,9 +21,18 @@ pub const ANSI_FILL_LINE = "\x1b[K";
 
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
-pub const LIST_VISIBLE_ITEMS = 7;
+pub var LIST_VISIBLE_ITEMS: u8 = 7;
 
 var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
+
+pub fn initializeListVisibleItems(allocator: std.mem.Allocator) !void {
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    if (settings.list_visible_items) |count| {
+        LIST_VISIBLE_ITEMS = count;
+    }
+}
 
 pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});

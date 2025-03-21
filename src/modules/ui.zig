@@ -3,8 +3,8 @@ const terminal = @import("terminal.zig");
 const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 
-pub const BOX_WIDTH = 58;
-pub const MENU_WIDTH = 52;
+pub const BOX_WIDTH = 59;
+pub const MENU_WIDTH = 53;
 pub const BORDER_WIDTH = BOX_WIDTH;
 
 pub const ANSI_INVERT_ON = "\x1b[7m";
@@ -21,6 +21,8 @@ pub const ANSI_FILL_LINE = "\x1b[K";
 
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
+
+var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
 
 pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
@@ -39,17 +41,17 @@ pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_it
 
 pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !void {
     if (is_top) {
-        try stdout.print("┌", .{});
+        try stdout.print("╭", .{});
         for (0..BORDER_WIDTH - 2) |_| {
             try stdout.print("─", .{});
         }
-        try stdout.print("┐\n", .{});
+        try stdout.print("╮\n", .{});
     } else if (is_bottom) {
-        try stdout.print("└", .{});
+        try stdout.print("╰", .{});
         for (0..BORDER_WIDTH - 2) |_| {
             try stdout.print("─", .{});
         }
-        try stdout.print("┘\n", .{});
+        try stdout.print("╯\n", .{});
     } else {
         try stdout.print("├", .{});
         for (0..BORDER_WIDTH - 2) |_| {
@@ -61,14 +63,14 @@ pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !
 
 pub fn renderControls(stdout: std.fs.File.Writer, show_quit: bool) !void {
     if (show_quit) {
-        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Quit     │\n", .{
+        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Quit      │\n", .{
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
         });
     } else {
-        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back     │\n", .{
+        try stdout.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back      │\n", .{
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
             ANSI_BOLD_YELLOW, ANSI_RESET,
@@ -123,8 +125,11 @@ pub fn renderMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []c
 }
 
 pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize) !void {
-    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
-    try stdout.print("{s}:\n\n", .{title});
+    output_buffer.clearRetainingCapacity();
+    var writer = output_buffer.writer();
+
+    try writer.print("{s}", .{ANSI_CLEAR_SCREEN});
+    try writer.print("{s}:\n\n", .{title});
 
     const allocator = std.heap.page_allocator;
     const home_dir = utils.getHomeDirectory(allocator) catch "";
@@ -140,22 +145,40 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             parts.path;
 
         if (i == current_selection) {
-            try stdout.print("  {s}{d}:{s} {s}{s}{s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, ANSI_CYAN, parts.name, ANSI_RESET });
-            try stdout.print("  ➤   {s}{s}{s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
+            try writer.print("  {s}{d}:{s} {s}{s}{s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, ANSI_CYAN, parts.name, ANSI_RESET });
+            try writer.print("  ➤   {s}{s}{s}{s}\n", .{ ANSI_CYAN, ANSI_CYAN, display_path, ANSI_RESET });
         } else {
-            try stdout.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
-            try stdout.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+            try writer.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+            try writer.print("      {s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
 
         if (i < items.len - 1) {
-            try stdout.print("  {s}· · · · · · · · · · · · · · · · · · · · · · · · · · · ·{s}\n", .{ ANSI_GRAY, ANSI_RESET });
+            try writer.print("  {s}· · · · · · · · · · · · · · · · · · · · · · · · · · · ·{s}\n", .{ ANSI_GRAY, ANSI_RESET });
         }
     }
 
-    try stdout.print("\n", .{});
-    try renderBorder(stdout, true, false);
-    try renderControls(stdout, false);
-    try renderBorder(stdout, false, true);
+    try writer.print("\n", .{});
+
+    try writer.print("╭", .{});
+    for (0..BORDER_WIDTH - 2) |_| {
+        try writer.print("─", .{});
+    }
+    try writer.print("╮\n", .{});
+
+    try writer.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back      │\n", .{
+        ANSI_BOLD_YELLOW, ANSI_RESET,
+        ANSI_BOLD_YELLOW, ANSI_RESET,
+        ANSI_BOLD_YELLOW, ANSI_RESET,
+        ANSI_BOLD_YELLOW, ANSI_RESET,
+    });
+
+    try writer.print("╰", .{});
+    for (0..BORDER_WIDTH - 2) |_| {
+        try writer.print("─", .{});
+    }
+    try writer.print("╯\n", .{});
+
+    try stdout.writeAll(output_buffer.items);
 }
 
 pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, categories: []const []const u8) !?[]const u8 {
@@ -185,8 +208,8 @@ pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, cat
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
-                'B' => current_selection = @min(current_selection + 1, categories.len - 1), // Down arrow
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, categories.len - 1),
                 else => {},
             }
         }
@@ -215,8 +238,8 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
-                'B' => current_selection = @min(current_selection + 1, menu_items.len - 1), // Down arrow
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, menu_items.len - 1),
                 else => {},
             }
         }
@@ -250,8 +273,8 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0, // Up arrow
-                'B' => current_selection = @min(current_selection + 1, items.len - 1), // Down arrow
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, items.len - 1),
                 else => {},
             }
         }

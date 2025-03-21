@@ -29,7 +29,7 @@ pub fn main() !void {
                 try listFavorites(allocator);
                 return;
             } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
-                try stdout.print("cofi version 0.3.0\n", .{});
+                try stdout.print("cofi version 0.4.0\n", .{});
                 return;
             } else {
                 const error_msg = try std.fmt.allocPrint(allocator, "Unknown flag '{s}'", .{arg});

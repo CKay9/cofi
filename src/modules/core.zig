@@ -36,13 +36,26 @@ pub fn changeEditorSetting(allocator: std.mem.Allocator) !void {
     var settings = try utils.loadSettings(allocator);
     defer settings.deinit(allocator);
 
-    const current_editor = if (settings.editor) |editor|
-        editor
-    else
-        utils.getEditorName(allocator) catch "nano";
+    var env_editor: ?[]const u8 = null;
+    var display_editor: []const u8 = undefined;
 
-    try stdout.print("Current editor: {s}\n", .{current_editor});
+    if (settings.editor) |editor| {
+        display_editor = editor;
+    } else {
+        env_editor = utils.getEditorName(allocator) catch null;
+        if (env_editor) |editor| {
+            display_editor = editor;
+        } else {
+            display_editor = "nano";
+        }
+    }
+
+    try stdout.print("Current editor: {s}\n", .{display_editor});
     try stdout.print("Enter new editor (leave empty to use environment variable): ", .{});
+
+    if (env_editor) |editor| {
+        allocator.free(editor);
+    }
 
     var buffer: [256]u8 = undefined;
     const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse "";

@@ -22,6 +22,17 @@ pub const ItemParts = struct {
     path: []const u8,
 };
 
+pub const Settings = struct {
+    editor: ?[]const u8 = null,
+
+    pub fn deinit(self: *Settings, allocator: std.mem.Allocator) void {
+        if (self.editor) |editor| {
+            allocator.free(editor);
+            self.editor = null;
+        }
+    }
+};
+
 pub fn splitPathAndName(item: []const u8) ItemParts {
     if (std.mem.indexOf(u8, item, " - ")) |dash_index| {
         return ItemParts{
@@ -66,6 +77,61 @@ pub fn initializeFavoritesFile(path: []const u8, _: Allocator) !void {
     }
 }
 
+pub fn loadSettings(allocator: std.mem.Allocator) !Settings {
+    var settings = Settings{};
+
+    const paths = try getFavoritesPath(allocator);
+    const settings_path = try std.fmt.allocPrint(allocator, "{s}/settings.json", .{paths.config_dir});
+    defer allocator.free(settings_path);
+    defer allocator.free(paths.config_dir);
+    defer allocator.free(paths.favorites_path);
+
+    const file = std.fs.openFileAbsolute(settings_path, .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            try saveSettings(allocator, settings);
+            return settings;
+        }
+        return err;
+    };
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    const parsed = std.json.parseFromSlice(
+        Settings,
+        allocator,
+        content,
+        .{},
+    ) catch |err| {
+        const stdout = std.io.getStdOut().writer();
+        try stdout.print("Error parsing settings: {any}\n", .{err});
+        try stdout.print("Reinitializing settings file\n", .{});
+        try saveSettings(allocator, settings);
+        return settings;
+    };
+    defer parsed.deinit();
+
+    if (parsed.value.editor) |editor| {
+        settings.editor = try allocator.dupe(u8, editor);
+    }
+
+    return settings;
+}
+
+pub fn saveSettings(allocator: std.mem.Allocator, settings: Settings) !void {
+    const paths = try getFavoritesPath(allocator);
+    const settings_path = try std.fmt.allocPrint(allocator, "{s}/settings.json", .{paths.config_dir});
+    defer allocator.free(settings_path);
+    defer allocator.free(paths.config_dir);
+    defer allocator.free(paths.favorites_path);
+
+    const file = try std.fs.createFileAbsolute(settings_path, .{});
+    defer file.close();
+
+    try std.json.stringify(settings, .{ .whitespace = .indent_4 }, file.writer());
+}
+
 pub fn getHomeDirectory(allocator: Allocator) ![]const u8 {
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
@@ -77,7 +143,20 @@ pub fn getHomeDirectory(allocator: Allocator) ![]const u8 {
     return allocator.dupe(u8, home_dir);
 }
 
-pub fn getEditorName(allocator: Allocator) ![]const u8 {
+pub fn getEditorName(allocator: std.mem.Allocator) ![]const u8 {
+    var settings = loadSettings(allocator) catch {
+        var env_map = try process.getEnvMap(allocator);
+        defer env_map.deinit();
+
+        const editor = env_map.get("EDITOR") orelse "nano";
+        return allocator.dupe(u8, editor);
+    };
+    defer settings.deinit(allocator);
+
+    if (settings.editor) |editor| {
+        return allocator.dupe(u8, editor);
+    }
+
     var env_map = try process.getEnvMap(allocator);
     defer env_map.deinit();
 
@@ -192,11 +271,9 @@ pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    // Expand the path if it starts with ~
     const expanded_path = try expandTildePath(file_path, allocator);
     defer allocator.free(expanded_path);
 
-    // Check if file exists before attempting to open
     const file_exists = blk: {
         var file = fs.openFileAbsolute(expanded_path, .{}) catch |err| {
             if (err == error.FileNotFound) {

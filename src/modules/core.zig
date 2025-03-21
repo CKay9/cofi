@@ -8,6 +8,64 @@ const terminal = @import("terminal.zig");
 const utils = @import("utils.zig");
 const ui = @import("ui.zig");
 
+pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    const menu_items = [_][]const u8{ "Editor", "Back" };
+
+    while (true) {
+        const selection = try ui.selectFromMenu(stdout, stdin, "Settings", &menu_items);
+
+        if (selection) |idx| {
+            switch (idx) {
+                0 => try changeEditorSetting(allocator),
+                1 => return,
+                else => {},
+            }
+        } else {
+            return;
+        }
+    }
+}
+
+pub fn changeEditorSetting(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    const current_editor = if (settings.editor) |editor|
+        editor
+    else
+        utils.getEditorName(allocator) catch "nano";
+
+    try stdout.print("Current editor: {s}\n", .{current_editor});
+    try stdout.print("Enter new editor (leave empty to use environment variable): ", .{});
+
+    var buffer: [256]u8 = undefined;
+    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse "";
+
+    if (input.len > 0) {
+        if (settings.editor) |old_editor| {
+            allocator.free(old_editor);
+        }
+        settings.editor = try allocator.dupe(u8, input);
+    } else {
+        if (settings.editor) |old_editor| {
+            allocator.free(old_editor);
+            settings.editor = null;
+        }
+    }
+
+    try utils.saveSettings(allocator, settings);
+
+    try stdout.print("\nEditor updated. Press any key to continue...", .{});
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
+}
+
 fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -27,7 +85,6 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     };
     defer allocator.free(expanded_path);
 
-    // Check if the path is absolute
     if (!fs.path.isAbsolute(expanded_path)) {
         try stdout.print("\nError: Path must be absolute (start with '/' or '~/')\n", .{});
         try stdout.print("You entered: '{s}'\n", .{input_path});
@@ -37,7 +94,6 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
         return;
     }
 
-    // Now that we have a valid absolute path, check if the file exists
     const file_exists = blk: {
         var file = fs.openFileAbsolute(expanded_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
@@ -62,7 +118,6 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
         return;
     }
 
-    // Check if the file is already in favorites
     for (favorites.items) |fav| {
         if (std.mem.eql(u8, fav.path, expanded_path)) {
             try stdout.print("\nFile is already in favorites.\n", .{});
@@ -295,7 +350,7 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
         favorites_list.deinit();
     }
 
-    const menu_items = [_][]const u8{ "Show files", "Add file", "Remove file", "Categories", "Exit" };
+    const menu_items = [_][]const u8{ "Show files", "Add file", "Remove file", "Categories", "Settings", "Exit" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "cofi - Config File Manager", &menu_items);
@@ -306,7 +361,8 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
                 1 => try addFavorite(&favorites_list, paths.favorites_path, allocator),
                 2 => try removeFavorite(&favorites_list, paths.favorites_path, allocator),
                 3 => try showCategoriesMenu(&favorites_list, allocator),
-                4 => return,
+                4 => try showSettingsMenu(allocator),
+                5 => return,
                 else => {},
             }
         } else {

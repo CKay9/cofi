@@ -200,7 +200,7 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
         try display_items.append(display);
     }
 
-    const selection = try ui.selectFromList(stdout, stdin, "Available files", display_items.items);
+    const selection = try ui.selectFromList(stdout, stdin, "Remove Files", display_items.items, true);
 
     if (selection) |idx| {
         try stdout.print("Remove {s}? (y/n): ", .{display_items.items[idx]});
@@ -209,7 +209,6 @@ fn removeFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, alloc
         const confirm = (try stdin.readUntilDelimiterOrEof(&confirm_buffer, '\n')) orelse "";
 
         if (confirm.len > 0 and (confirm[0] == 'y' or confirm[0] == 'Y')) {
-            // Free memory for the removed favorite
             if (favorites.items[idx].name) |name| allocator.free(name);
             if (favorites.items[idx].category) |category| allocator.free(category);
             allocator.free(favorites.items[idx].path);
@@ -378,7 +377,7 @@ fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Alloc
     const list_title = try std.fmt.allocPrint(allocator, "Files - {s}", .{selected_category});
     defer allocator.free(list_title);
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items, false);
 
     if (favorite_selection) |idx| {
         const original_idx = display_to_favorite.items[idx];
@@ -467,7 +466,7 @@ fn showAllFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Al
         try display_items.append(display);
     }
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files", display_items.items);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files", display_items.items, false);
 
     if (favorite_selection) |idx| {
         try utils.openWithEditor(favorites.items[idx].path, allocator);
@@ -546,7 +545,7 @@ fn showFilteredFavorites(favorites: *ArrayList(utils.Favorite), category: []cons
     const list_title = try std.fmt.allocPrint(allocator, "Category: {s}", .{category});
     defer allocator.free(list_title);
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items, false);
 
     if (favorite_selection) |idx| {
         const original_idx = display_to_favorite.items[idx];

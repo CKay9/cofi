@@ -16,6 +16,7 @@ pub const ANSI_GRAY = "\x1b[38;5;242m";
 pub const ANSI_LIGHT_GRAY = "\x1b[38;5;250m";
 pub const ANSI_MEDIUM_GRAY = "\x1b[38;5;245m";
 pub const ANSI_BLUE = "\x1b[34m";
+pub const ANSI_RED = "\x1b[31m";
 pub const ANSI_CYAN = "\x1b[36m";
 pub const ANSI_FILL_LINE = "\x1b[K";
 
@@ -136,7 +137,7 @@ pub fn renderMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []c
     try renderBorder(stdout, false, true);
 }
 
-pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, visible_items_count: usize) !void {
+pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, visible_items_count: usize, is_deletion_menu: bool) !void {
     output_buffer.clearRetainingCapacity();
     var writer = output_buffer.writer();
 
@@ -173,15 +174,17 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             parts.path;
 
         if (i == current_selection) {
+            const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
+
             try writer.print("  {s}{s}{d}: {s}{s}{s}\n", .{
-                ANSI_CYAN, // Cyan color
-                ANSI_INVERT_ON, // Start inverting the entire line
-                i + 1, // The item number
-                parts.name, // The name part
-                ANSI_FILL_LINE, // Fill to end of line with background color
-                ANSI_INVERT_OFF, // Stop inverting
+                highlight_color, // Red or cyan depending on mode
+                ANSI_INVERT_ON,
+                i + 1,
+                parts.name,
+                ANSI_FILL_LINE,
+                ANSI_INVERT_OFF,
             });
-            try writer.print("    {s}╰─{s}{s}\n", .{ ANSI_CYAN, display_path, ANSI_RESET });
+            try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
         } else {
             try writer.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
             try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
@@ -290,7 +293,7 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     }
 }
 
-pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8) !?usize {
+pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?usize {
     if (items.len == 0) {
         try stdout.print("No items available in list: {s}\n", .{title});
         return null;
@@ -302,7 +305,7 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     defer terminal.disableRawMode();
 
     while (true) {
-        try renderList(stdout, title, items, current_selection, LIST_VISIBLE_ITEMS);
+        try renderList(stdout, title, items, current_selection, LIST_VISIBLE_ITEMS, is_deletion_menu);
 
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);

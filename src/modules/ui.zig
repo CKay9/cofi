@@ -31,6 +31,8 @@ pub fn initializeListVisibleItems(allocator: std.mem.Allocator) !void {
 
     if (settings.list_visible_items) |count| {
         LIST_VISIBLE_ITEMS = count;
+        const stdout = std.io.getStdOut().writer();
+        try stdout.print("Loaded LIST_VISIBLE_ITEMS from settings: {d}\n", .{count});
     }
 }
 
@@ -162,7 +164,6 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
         }
     }
 
-    // Display the visible items
     for (start_idx..end_idx) |i| {
         const item = items[i];
         var parts = utils.splitPathAndName(item);
@@ -186,7 +187,6 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
 
     try writer.print("\n", .{});
 
-    // Show both indicators in the same area after the list
     try writer.print("  Item {d} of {d}", .{ current_selection + 1, items.len });
     if (start_idx > 0) {
         try writer.print("  {s}(↑ more above){s}", .{ ANSI_MEDIUM_GRAY, ANSI_RESET });

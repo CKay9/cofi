@@ -117,6 +117,8 @@ pub fn loadSettings(allocator: std.mem.Allocator) !Settings {
         settings.editor = try allocator.dupe(u8, editor);
     }
 
+    settings.list_visible_items = parsed.value.list_visible_items;
+
     return settings;
 }
 
@@ -218,7 +220,6 @@ pub fn loadFavorites(path: []const u8, allocator: std.mem.Allocator) !ArrayList(
     defer allocator.free(content);
 
     const stdout = std.io.getStdOut().writer();
-    // try stdout.print("JSON content: {s}\n", .{content});
 
     if (content.len == 0 or std.mem.eql(u8, std.mem.trim(u8, content, &std.ascii.whitespace), "")) {
         try initializeFavoritesFile(path, allocator);

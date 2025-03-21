@@ -176,7 +176,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
         if (i == current_selection) {
             const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
 
-            try writer.print("  {s}{s}{d}: {s}{s}{s}\n", .{
+            try writer.print("  {s}{s}{d}  {s}{s}{s}\n", .{
                 highlight_color, // Red or cyan depending on mode
                 ANSI_INVERT_ON,
                 i + 1,
@@ -186,7 +186,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
             });
             try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
         } else {
-            try writer.print("  {s}{d}:{s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+            try writer.print("  {s}{d} {s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
             try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
 

@@ -1,6 +1,5 @@
 const std = @import("std");
 
-// Basic help text
 pub const BASIC_HELP =
     \\🌽 cofi - Config File Manager 🌽
     \\
@@ -19,12 +18,10 @@ pub const BASIC_HELP =
     \\
 ;
 
-// Function to print help text
 pub fn printHelp(writer: std.fs.File.Writer) !void {
     try writer.print("{s}\n", .{BASIC_HELP});
 }
 
-// Print error and then help
 pub fn printErrorAndHelp(writer: std.fs.File.Writer, err_msg: []const u8) !void {
     try writer.print("Error: {s}\n\n", .{err_msg});
     try printHelp(writer);

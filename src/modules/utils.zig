@@ -22,9 +22,21 @@ pub const ItemParts = struct {
     path: []const u8,
 };
 
+pub const SortField = enum {
+    name,
+    category,
+};
+
+pub const SortOrder = enum {
+    ascending,
+    descending,
+};
+
 pub const Settings = struct {
     editor: ?[]const u8 = null,
     list_visible_items: ?u8 = null,
+    sort_field: SortField = .name,
+    sort_order: SortOrder = .ascending,
 
     pub fn deinit(self: *Settings, allocator: std.mem.Allocator) void {
         if (self.editor) |editor| {
@@ -33,6 +45,59 @@ pub const Settings = struct {
         }
     }
 };
+
+pub fn sortFavoritesList(favorites: *ArrayList(Favorite), settings: Settings) void {
+    std.sort.insertion(Favorite, favorites.items, settings, compareFavorites);
+}
+
+fn compareFavorites(ctx: Settings, a: Favorite, b: Favorite) bool {
+    const asc = ctx.sort_order == .ascending;
+
+    const compareStrings = struct {
+        fn compare(str_a: []const u8, str_b: []const u8) bool {
+            var buf_a: [256]u8 = undefined;
+            var buf_b: [256]u8 = undefined;
+
+            const len_a = @min(str_a.len, buf_a.len);
+            const len_b = @min(str_b.len, buf_b.len);
+
+            for (0..len_a) |i| {
+                buf_a[i] = std.ascii.toLower(str_a[i]);
+            }
+
+            for (0..len_b) |i| {
+                buf_b[i] = std.ascii.toLower(str_b[i]);
+            }
+
+            return std.mem.lessThan(u8, buf_a[0..len_a], buf_b[0..len_b]);
+        }
+    }.compare;
+
+    switch (ctx.sort_field) {
+        .name => {
+            const a_name = if (a.name) |name| name else a.path;
+            const b_name = if (b.name) |name| name else b.path;
+
+            const result = compareStrings(a_name, b_name);
+            return if (asc) result else !result;
+        },
+        .category => {
+            const a_cat = if (a.category) |cat| cat else "";
+            const b_cat = if (b.category) |cat| cat else "";
+
+            if (std.ascii.eqlIgnoreCase(a_cat, b_cat)) {
+                const a_name = if (a.name) |name| name else a.path;
+                const b_name = if (b.name) |name| name else b.path;
+
+                const result = compareStrings(a_name, b_name);
+                return if (asc) result else !result;
+            }
+
+            const result = compareStrings(a_cat, b_cat);
+            return if (asc) result else !result;
+        },
+    }
+}
 
 pub fn handleError(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, message: []const u8) !void {
     try stdout.print("\nError: {s}\n", .{message});
@@ -131,6 +196,9 @@ pub fn loadSettings(allocator: std.mem.Allocator) !Settings {
     }
 
     settings.list_visible_items = parsed.value.list_visible_items;
+
+    settings.sort_field = parsed.value.sort_field;
+    settings.sort_order = parsed.value.sort_order;
 
     return settings;
 }

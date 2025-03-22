@@ -12,7 +12,7 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    const menu_items = [_][]const u8{ "Editor", "List Items Count", "Back" };
+    const menu_items = [_][]const u8{ "Editor", "List Items Count", "Sort by Name [A-Z] or [Z-A]", "Sort by Category [A-Z] or [Z-A]", "Back" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "Settings", &menu_items);
@@ -21,7 +21,9 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
             switch (idx) {
                 0 => try changeEditorSetting(allocator),
                 1 => try changeListVisibleItemsSetting(allocator),
-                2 => return,
+                2 => try changeSortSettings(allocator, .name),
+                3 => try changeSortSettings(allocator, .category),
+                4 => return,
                 else => {},
             }
         } else {
@@ -413,6 +415,11 @@ fn showAllFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Al
         return;
     }
 
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    utils.sortFavoritesList(favorites, settings);
+
     var display_items = ArrayList([]u8).init(allocator);
     defer {
         for (display_items.items) |item| {
@@ -522,4 +529,30 @@ fn showFilteredFavorites(favorites: *ArrayList(utils.Favorite), category: []cons
         const original_idx = display_to_favorite.items[idx];
         try utils.openWithEditor(favorites.items[original_idx].path, allocator);
     }
+}
+
+pub fn changeSortSettings(allocator: std.mem.Allocator, field: utils.SortField) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    const is_already_selected = settings.sort_field == field;
+
+    if (is_already_selected) {
+        settings.sort_order = if (settings.sort_order == .ascending) .descending else .ascending;
+    } else {
+        settings.sort_field = field;
+        settings.sort_order = .ascending;
+    }
+
+    try utils.saveSettings(allocator, settings);
+
+    const field_name = if (field == .name) "Name" else "Category";
+    const order_name = if (settings.sort_order == .ascending) "A-Z" else "Z-A";
+
+    try stdout.print("\nSort updated: {s} ({s}). Press any key to continue...", .{ field_name, order_name });
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
 }

@@ -88,22 +88,14 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     var path_buffer: [1024]u8 = undefined;
     const input_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
 
-    var expanded_path: []const u8 = undefined;
-    expanded_path = utils.expandTildePath(input_path, allocator) catch |err| {
-        try stdout.print("\nError: Invalid path format '{s}': {}\n", .{ input_path, err });
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+    const expanded_path = utils.expandTildePath(input_path, allocator) catch |err| {
+        try utils.handleErrorFmt(stdout, stdin, allocator, "Invalid path format '{s}': {}", .{ input_path, err });
         return;
     };
     defer allocator.free(expanded_path);
 
     if (!fs.path.isAbsolute(expanded_path)) {
-        try stdout.print("\nError: Path must be absolute (start with '/' or '~/')\n", .{});
-        try stdout.print("You entered: '{s}'\n", .{input_path});
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleErrorFmt(stdout, stdin, allocator, "Path must be absolute (start with '/' or '~/'). You entered: '{s}'", .{input_path});
         return;
     }
 
@@ -112,10 +104,7 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
             if (err == error.FileNotFound) {
                 break :blk false;
             } else {
-                try stdout.print("\nError accessing file: {}\n", .{err});
-                try stdout.print("Press any key to continue...", .{});
-                var key_buffer: [1]u8 = undefined;
-                _ = try stdin.read(&key_buffer);
+                try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Error accessing file: {}", .{err}));
                 return;
             }
         };
@@ -124,19 +113,13 @@ fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocato
     };
 
     if (!file_exists) {
-        try stdout.print("\nError: File '{s}' does not exist\n", .{expanded_path});
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "File '{s}' does not exist", .{expanded_path}));
         return;
     }
 
     for (favorites.items) |fav| {
         if (std.mem.eql(u8, fav.path, expanded_path)) {
-            try stdout.print("\nFile is already in favorites.\n", .{});
-            try stdout.print("Press any key to continue...", .{});
-            var key_buffer: [1]u8 = undefined;
-            _ = try stdin.read(&key_buffer);
+            try utils.handleError(stdout, stdin, "File is already in favorites.");
             return;
         }
     }
@@ -239,18 +222,12 @@ pub fn changeListVisibleItemsSetting(allocator: std.mem.Allocator) !void {
 
     if (input.len > 0) {
         const new_count = std.fmt.parseInt(u8, input, 10) catch |err| {
-            try stdout.print("\nInvalid input: {}\n", .{err});
-            try stdout.print("Press any key to continue...", .{});
-            var key_buffer: [1]u8 = undefined;
-            _ = try stdin.read(&key_buffer);
+            try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Invalid input: {}", .{err}));
             return;
         };
 
         if (new_count < 3 or new_count > 15) {
-            try stdout.print("\nValue must be between 3 and 15.\n", .{});
-            try stdout.print("Press any key to continue...", .{});
-            var key_buffer: [1]u8 = undefined;
-            _ = try stdin.read(&key_buffer);
+            try utils.handleError(stdout, stdin, "Value must be between 3 and 15.");
             return;
         }
 
@@ -273,7 +250,7 @@ fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Alloc
     const stdin = std.io.getStdIn().reader();
 
     if (favorites.items.len == 0) {
-        try stdout.print("No files available\n", .{});
+        try utils.handleError(stdout, stdin, "No files available");
         return;
     }
 
@@ -368,9 +345,7 @@ fn showFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Alloc
     }
 
     if (display_items.items.len == 0) {
-        try stdout.print("\nNo files match the selected category. Press any key to continue...\n", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{selected_category}));
         return;
     }
 
@@ -434,7 +409,7 @@ fn showAllFavorites(favorites: *ArrayList(utils.Favorite), allocator: std.mem.Al
     const stdin = std.io.getStdIn().reader();
 
     if (favorites.items.len == 0) {
-        try stdout.print("No files available\n", .{});
+        try utils.handleError(stdout, stdin, "No files available");
         return;
     }
 
@@ -486,9 +461,7 @@ fn showCategoriesMenu(favorites: *ArrayList(utils.Favorite), allocator: std.mem.
     }
 
     if (categories.items.len == 0) {
-        try stdout.print("No categories available. Add some files with categories first.\n", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
         return;
     }
 
@@ -536,9 +509,7 @@ fn showFilteredFavorites(favorites: *ArrayList(utils.Favorite), category: []cons
     }
 
     if (display_items.items.len == 0) {
-        try stdout.print("\nNo files with category '{s}'. Press any key to continue...\n", .{category});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{category}));
         return;
     }
 

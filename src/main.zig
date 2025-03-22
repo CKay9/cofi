@@ -47,9 +47,7 @@ pub fn main() !void {
                 const error_msg = try std.fmt.allocPrint(allocator, "Invalid argument '{s}'. Expected a number.", .{arg});
                 defer allocator.free(error_msg);
                 try help.printErrorAndHelp(stdout, error_msg);
-                try stdout.print("Press any key to continue...", .{});
-                var key_buffer: [1]u8 = undefined;
-                _ = try stdin.read(&key_buffer);
+                try utils.handleError(stdout, stdin, "");
                 return;
             };
 
@@ -62,6 +60,7 @@ pub fn main() !void {
 
 fn listFavorites(allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
 
     const paths = try utils.getFavoritesPath(allocator);
     defer allocator.free(paths.config_dir);
@@ -80,7 +79,7 @@ fn listFavorites(allocator: std.mem.Allocator) !void {
     }
 
     if (favorites_list.items.len == 0) {
-        try stdout.print("No favorites found. Add some favorites first.\n", .{});
+        try utils.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
         return;
     }
 
@@ -127,18 +126,12 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
     }
 
     if (favorites_list.items.len == 0) {
-        try stdout.print("No favorites found. Add some favorites first.\n", .{});
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
         return;
     }
 
     if (index < 1 or index > favorites_list.items.len) {
-        try stdout.print("Error: Favorite index {d} out of range. Available range: 1-{d}\n", .{ index, favorites_list.items.len });
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Favorite index {d} out of range. Available range: 1-{d}", .{ index, favorites_list.items.len }));
         return;
     }
 

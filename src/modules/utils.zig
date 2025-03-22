@@ -34,6 +34,19 @@ pub const Settings = struct {
     }
 };
 
+pub fn handleError(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, message: []const u8) !void {
+    try stdout.print("\nError: {s}\n", .{message});
+    try stdout.print("Press any key to continue...", .{});
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
+}
+
+pub fn handleErrorFmt(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !void {
+    const msg = try std.fmt.allocPrint(allocator, fmt, args);
+    defer allocator.free(msg);
+    try handleError(stdout, stdin, msg);
+}
+
 pub fn splitPathAndName(item: []const u8) ItemParts {
     if (std.mem.indexOf(u8, item, " - ")) |dash_index| {
         return ItemParts{
@@ -281,10 +294,7 @@ pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
             if (err == error.FileNotFound) {
                 break :blk false;
             } else {
-                try stdout.print("\nError accessing file: {}\n", .{err});
-                try stdout.print("Press any key to continue...", .{});
-                var key_buffer: [1]u8 = undefined;
-                _ = try stdin.read(&key_buffer);
+                try handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Error accessing file: {}", .{err}));
                 return;
             }
         };
@@ -293,10 +303,7 @@ pub fn openWithEditor(file_path: []const u8, allocator: Allocator) !void {
     };
 
     if (!file_exists) {
-        try stdout.print("\nError: File '{s}' no longer exists or is not accessible.\n", .{expanded_path});
-        try stdout.print("Press any key to continue...", .{});
-        var key_buffer: [1]u8 = undefined;
-        _ = try stdin.read(&key_buffer);
+        try handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "File '{s}' no longer exists or is not accessible.", .{expanded_path}));
         return;
     }
 

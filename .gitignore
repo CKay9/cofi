@@ -16,5 +16,4 @@ cofi
 *.bak
 
 # Project based
-.cofi_dev_mode
 .cofi_install.sh

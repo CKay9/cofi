@@ -37,6 +37,20 @@ pub fn initializeListVisibleItems(allocator: std.mem.Allocator) !void {
     }
 }
 
+pub fn runInstallScript() !void {
+    const stdout = std.io.getStdOut().writer();
+
+    try stdout.print("\n🔄 Running installation script...\n", .{});
+
+    var child = std.process.Child.init(&[_][]const u8{ "/bin/bash", ".cofi_install.sh" }, std.heap.page_allocator);
+
+    child.stdin_behavior = .Inherit;
+    child.stdout_behavior = .Inherit;
+    child.stderr_behavior = .Inherit;
+
+    _ = try child.spawnAndWait();
+}
+
 pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
     try stdout.print("🌽 {s} 🌽\n\n", .{title});
@@ -281,6 +295,11 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
                 'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
                 '\r', '\n' => return current_selection,
                 'q' => return null,
+                'r' => {
+                    terminal.disableRawMode();
+                    try runInstallScript();
+                    try terminal.enableRawMode();
+                },
                 else => {},
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
@@ -318,6 +337,11 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
                 'G' => current_selection = items.len - 1,
                 '\r', '\n' => return current_selection,
                 'q' => return null,
+                'r' => {
+                    terminal.disableRawMode();
+                    try runInstallScript();
+                    try terminal.enableRawMode();
+                },
                 else => {},
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {

@@ -385,7 +385,7 @@ pub fn manageFavorites(allocator: std.mem.Allocator) !void {
         favorites_list.deinit();
     }
 
-    const menu_items = [_][]const u8{ "Show files", "Add file", "Remove file", "Categories", "Settings", "Exit" };
+    const menu_items = [_][]const u8{ "Show all files", "Add file", "Remove file", "Categories", "Settings", "Exit" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "cofi - Config File Manager", &menu_items);

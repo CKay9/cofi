@@ -395,33 +395,61 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         }
     }
 
+    const terminal_width = 68;
+
     if (index == current_selection) {
         const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
 
-        try writer.print("  {s}{s}{d}  {s}", .{ highlight_color, ANSI_INVERT_ON, index + 1, clean_name });
-
         if (category) |cat| {
             const category_color = config.getCategoryColor(settings, cat, allocator) catch null;
             defer if (category_color) |color| allocator.free(color);
-
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
-            try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
+
+            const base_text = std.fmt.allocPrint(allocator, "  {d}  {s}", .{ index + 1, clean_name }) catch "";
+            defer if (base_text.len > 0) allocator.free(base_text);
+
+            const cat_display = std.fmt.allocPrint(allocator, "[{s}]", .{cat}) catch "";
+            defer if (cat_display.len > 0) allocator.free(cat_display);
+
+            const padding_needed = terminal_width - base_text.len - cat_display.len - 10;
+            var padding = std.ArrayList(u8).init(allocator);
+            defer padding.deinit();
+
+            for (0..padding_needed) |_| {
+                padding.append(' ') catch {};
+            }
+
+            try writer.print("  {s}{s}{d}  {s}{s}{s}{s}[{s}]{s}{s}{s}\n", .{ highlight_color, ANSI_INVERT_ON, index + 1, clean_name, ANSI_INVERT_ON, padding.items, color_code, cat, highlight_color, ANSI_INVERT_OFF, ANSI_FILL_LINE });
+        } else {
+            try writer.print("  {s}{s}{d}  {s}{s}{s}\n", .{ highlight_color, ANSI_INVERT_ON, index + 1, clean_name, ANSI_FILL_LINE, ANSI_INVERT_OFF });
         }
 
-        try writer.print("{s}{s}\n", .{ ANSI_FILL_LINE, ANSI_INVERT_OFF });
         try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
     } else {
-        try writer.print("  {s}{d} {s}{s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, clean_name });
-
         if (category) |cat| {
             const category_color = config.getCategoryColor(settings, cat, allocator) catch null;
             defer if (category_color) |color| allocator.free(color);
-
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
-            try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
+
+            const base_text = std.fmt.allocPrint(allocator, "  {d} {s}", .{ index + 1, clean_name }) catch "";
+            defer if (base_text.len > 0) allocator.free(base_text);
+
+            const cat_display = std.fmt.allocPrint(allocator, "[{s}]", .{cat}) catch "";
+            defer if (cat_display.len > 0) allocator.free(cat_display);
+
+            const padding_needed = terminal_width - base_text.len - cat_display.len - 10;
+            var padding = std.ArrayList(u8).init(allocator);
+            defer padding.deinit();
+
+            for (0..padding_needed) |_| {
+                padding.append(' ') catch {};
+            }
+
+            try writer.print("  {s}{d} {s}{s}{s}{s}[{s}]{s}\n", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, clean_name, padding.items, color_code, cat, ANSI_RESET });
+        } else {
+            try writer.print("  {s}{d} {s}{s}\n", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, clean_name });
         }
 
-        try writer.print("\n", .{});
         try writer.print("     {s}~{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
     }
 }

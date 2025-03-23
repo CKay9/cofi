@@ -178,8 +178,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     output_buffer.clearRetainingCapacity();
     var writer = output_buffer.writer();
 
-    try writer.print("{s}", .{ANSI_CLEAR_SCREEN});
-    try writer.print("{s}:\n\n", .{title});
+    try writer.print("{s}\n{s}:\n\n", .{ ANSI_CLEAR_SCREEN, title });
 
     const allocator = std.heap.page_allocator;
     const home_dir = utils.getHomeDirectory(allocator) catch "";
@@ -188,96 +187,106 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     var settings = utils.loadSettings(allocator) catch utils.Settings{};
     defer settings.deinit(allocator);
 
-    var path_buffer: [1024]u8 = undefined;
-
-    const half_visible = visible_items_count / 2;
-    var start_idx: usize = 0;
-    var end_idx: usize = items.len;
-
-    if (items.len > visible_items_count) {
-        if (current_selection > half_visible) {
-            start_idx = current_selection - half_visible;
-        }
-        end_idx = start_idx + visible_items_count;
-        if (end_idx > items.len) {
-            end_idx = items.len;
-            start_idx = if (items.len > visible_items_count) items.len - visible_items_count else 0;
-        }
-    }
+    const visible_range = calculateVisibleRange(items.len, current_selection, visible_items_count);
+    const start_idx = visible_range.start;
+    const end_idx = visible_range.end;
 
     for (start_idx..end_idx) |i| {
-        const item = items[i];
-        var parts = utils.splitPathAndName(item);
-        const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
-            std.fmt.bufPrint(&path_buffer, "{s}", .{parts.path[home_dir.len..]}) catch parts.path
-        else
-            parts.path;
-
-        var category: ?[]const u8 = null;
-        if (std.mem.indexOf(u8, item, " [")) |bracket_start| {
-            if (std.mem.indexOf(u8, item[bracket_start..], "]")) |bracket_end| {
-                category = item[bracket_start + 2 .. bracket_start + bracket_end];
-            }
-        }
-
-        if (i == current_selection) {
-            const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
-
-            try writer.print("  {s}{s}{d}  {s}", .{
-                highlight_color,
-                ANSI_INVERT_ON,
-                i + 1,
-                parts.name,
-            });
-
-            if (category) |cat| {
-                const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
-                defer if (category_color) |color| allocator.free(color);
-
-                try writer.print(" [{s}]", .{cat});
-            }
-
-            try writer.print("{s}{s}\n", .{
-                ANSI_FILL_LINE,
-                ANSI_INVERT_OFF,
-            });
-
-            try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
-        } else {
-            try writer.print("  {s}{d} {s} {s}", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
-
-            if (category) |cat| {
-                const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
-                defer if (category_color) |color| allocator.free(color);
-
-                const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
-                try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
-            }
-
-            try writer.print("\n", .{});
-            try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
-        }
+        try renderListItem(writer, items[i], i, current_selection, home_dir, settings, is_deletion_menu, allocator);
 
         if (i < end_idx - 1) {
             try writer.print("  {s}· · · · · · · · · · · · · · · · · · · · · · · · · · · ·{s}\n", .{ ANSI_GRAY, ANSI_RESET });
         }
     }
 
-    try writer.print("\n", .{});
+    try renderListFooter(writer, current_selection, items.len, start_idx, end_idx);
 
-    try writer.print("  Item {d} of {d}", .{ current_selection + 1, items.len });
+    try stdout.writeAll(output_buffer.items);
+}
+
+fn calculateVisibleRange(total_items: usize, current_selection: usize, visible_items_count: usize) struct { start: usize, end: usize } {
+    if (total_items <= visible_items_count) {
+        return .{ .start = 0, .end = total_items };
+    }
+
+    const half_visible = visible_items_count / 2;
+    var start_idx: usize = 0;
+
+    if (current_selection > half_visible) {
+        start_idx = current_selection - half_visible;
+    }
+
+    var end_idx = start_idx + visible_items_count;
+    if (end_idx > total_items) {
+        end_idx = total_items;
+        start_idx = if (total_items > visible_items_count) total_items - visible_items_count else 0;
+    }
+
+    return .{ .start = start_idx, .end = end_idx };
+}
+
+fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: utils.Settings, is_deletion_menu: bool, allocator: std.mem.Allocator) !void {
+    var path_buffer: [1024]u8 = undefined;
+    var parts = utils.splitPathAndName(item);
+
+    const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
+        std.fmt.bufPrint(&path_buffer, "{s}", .{parts.path[home_dir.len..]}) catch parts.path
+    else
+        parts.path;
+
+    var category: ?[]const u8 = null;
+    if (std.mem.indexOf(u8, item, " [")) |bracket_start| {
+        if (std.mem.indexOf(u8, item[bracket_start..], "]")) |bracket_end| {
+            category = item[bracket_start + 2 .. bracket_start + bracket_end];
+        }
+    }
+
+    if (index == current_selection) {
+        const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
+
+        try writer.print("  {s}{s}{d}  {s}", .{ highlight_color, ANSI_INVERT_ON, index + 1, parts.name });
+
+        if (category) |cat| {
+            const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+            defer if (category_color) |color| allocator.free(color);
+
+            const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
+            try writer.print(" [{s}{s}{s}]", .{ color_code, cat, ANSI_RESET });
+        }
+
+        try writer.print("{s}{s}\n", .{ ANSI_FILL_LINE, ANSI_INVERT_OFF });
+        try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
+    } else {
+        try writer.print("  {s}{d} {s} {s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, parts.name });
+
+        if (category) |cat| {
+            const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+            defer if (category_color) |color| allocator.free(color);
+
+            const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
+            try writer.print(" [{s}{s}{s}]", .{ color_code, cat, ANSI_RESET });
+        }
+
+        try writer.print("\n", .{});
+        try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+    }
+}
+
+fn renderListFooter(writer: std.ArrayList(u8).Writer, current_selection: usize, total_items: usize, start_idx: usize, end_idx: usize) !void {
+    try writer.print("\n  Item {d} of {d}", .{ current_selection + 1, total_items });
+
     if (start_idx > 0) {
         try writer.print("  {s}(↑ more above){s}", .{ ANSI_MEDIUM_GRAY, ANSI_RESET });
     }
-    if (end_idx < items.len) {
+
+    if (end_idx < total_items) {
         try writer.print("  {s}(↓ more below){s}", .{ ANSI_MEDIUM_GRAY, ANSI_RESET });
     }
+
     try writer.print("\n\n", .{});
 
     try writer.print("╭", .{});
-    for (0..BORDER_WIDTH - 2) |_| {
-        try writer.print("─", .{});
-    }
+    for (0..BORDER_WIDTH - 2) |_| try writer.print("─", .{});
     try writer.print("╮\n", .{});
 
     try writer.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back      │\n", .{
@@ -288,12 +297,8 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     });
 
     try writer.print("╰", .{});
-    for (0..BORDER_WIDTH - 2) |_| {
-        try writer.print("─", .{});
-    }
+    for (0..BORDER_WIDTH - 2) |_| try writer.print("─", .{});
     try writer.print("╯\n", .{});
-
-    try stdout.writeAll(output_buffer.items);
 }
 
 pub fn selectColor(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8) !?[]const u8 {

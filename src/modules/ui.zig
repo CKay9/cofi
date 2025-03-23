@@ -383,16 +383,22 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         parts.path;
 
     var category: ?[]const u8 = null;
+    var clean_name = parts.name;
+
     if (std.mem.indexOf(u8, item, " [")) |bracket_start| {
         if (std.mem.indexOf(u8, item[bracket_start..], "]")) |bracket_end| {
             category = item[bracket_start + 2 .. bracket_start + bracket_end];
+
+            if (bracket_start < parts.name.len) {
+                clean_name = parts.name[0..bracket_start];
+            }
         }
     }
 
     if (index == current_selection) {
         const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
 
-        try writer.print("  {s}{s}{d}  {s}", .{ highlight_color, ANSI_INVERT_ON, index + 1, parts.name });
+        try writer.print("  {s}{s}{d}  {s}", .{ highlight_color, ANSI_INVERT_ON, index + 1, clean_name });
 
         if (category) |cat| {
             const category_color = config.getCategoryColor(settings, cat, allocator) catch null;
@@ -405,7 +411,7 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         try writer.print("{s}{s}\n", .{ ANSI_FILL_LINE, ANSI_INVERT_OFF });
         try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
     } else {
-        try writer.print("  {s}{d} {s}{s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, parts.name });
+        try writer.print("  {s}{d} {s}{s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, clean_name });
 
         if (category) |cat| {
             const category_color = config.getCategoryColor(settings, cat, allocator) catch null;

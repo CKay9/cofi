@@ -32,16 +32,114 @@ pub const SortOrder = enum {
     descending,
 };
 
+pub const CategoryColor = struct {
+    name: []const u8,
+    color: []const u8,
+
+    pub fn deinit(self: *CategoryColor, allocator: std.mem.Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.color);
+    }
+};
+
+pub fn setCategoryColor(settings: *Settings, category: []const u8, color: []const u8, allocator: std.mem.Allocator) !void {
+    if (settings.category_colors) |colors| {
+        for (colors) |*cat_color| {
+            if (std.mem.eql(u8, cat_color.name, category)) {
+                allocator.free(cat_color.color);
+                cat_color.color = try allocator.dupe(u8, color);
+                return;
+            }
+        }
+
+        var new_colors = try allocator.alloc(CategoryColor, colors.len + 1);
+
+        @memcpy(new_colors[0..colors.len], colors);
+
+        new_colors[colors.len] = CategoryColor{
+            .name = try allocator.dupe(u8, category),
+            .color = try allocator.dupe(u8, color),
+        };
+
+        allocator.free(colors);
+
+        settings.category_colors = new_colors;
+    } else {
+        var new_colors = try allocator.alloc(CategoryColor, 1);
+        new_colors[0] = CategoryColor{
+            .name = try allocator.dupe(u8, category),
+            .color = try allocator.dupe(u8, color),
+        };
+        settings.category_colors = new_colors;
+    }
+}
+
+pub fn removeCategoryColor(settings: *Settings, category: []const u8, allocator: std.mem.Allocator) !void {
+    if (settings.category_colors) |colors| {
+        var found_idx: ?usize = null;
+        for (colors, 0..) |color, i| {
+            if (std.mem.eql(u8, color.name, category)) {
+                found_idx = i;
+                break;
+            }
+        }
+
+        if (found_idx) |idx| {
+            colors[idx].deinit(allocator);
+
+            if (colors.len == 1) {
+                allocator.free(colors);
+                settings.category_colors = null;
+                return;
+            }
+
+            var new_colors = try allocator.alloc(CategoryColor, colors.len - 1);
+
+            if (idx > 0) {
+                @memcpy(new_colors[0..idx], colors[0..idx]);
+            }
+
+            if (idx < colors.len - 1) {
+                @memcpy(new_colors[idx..], colors[idx + 1 ..]);
+            }
+
+            allocator.free(colors);
+
+            settings.category_colors = new_colors;
+        }
+    }
+}
+
+pub fn getCategoryColor(settings: Settings, category: []const u8, allocator: std.mem.Allocator) !?[]const u8 {
+    if (settings.category_colors) |colors| {
+        for (colors) |color| {
+            if (std.mem.eql(u8, color.name, category)) {
+                return try allocator.dupe(u8, color.color);
+            }
+        }
+    }
+    return null;
+}
+
 pub const Settings = struct {
     editor: ?[]const u8 = null,
     list_visible_items: ?u8 = null,
     sort_field: SortField = .name,
     sort_order: SortOrder = .ascending,
+    category_colors: ?[]CategoryColor = null,
 
     pub fn deinit(self: *Settings, allocator: std.mem.Allocator) void {
         if (self.editor) |editor| {
             allocator.free(editor);
             self.editor = null;
+        }
+
+        if (self.category_colors) |colors| {
+            for (colors) |*color| {
+                color.deinit(allocator);
+            }
+            allocator.free(colors);
+            self.category_colors = null;
         }
     }
 };

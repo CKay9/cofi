@@ -12,7 +12,7 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    const menu_items = [_][]const u8{ "Editor", "List Items Count", "Sort by Name [A-Z] or [Z-A]", "Sort by Category [A-Z] or [Z-A]", "Back" };
+    const menu_items = [_][]const u8{ "Editor", "List Items Count", "Sort by Name [A-Z] or [Z-A]", "Sort by Category [A-Z] or [Z-A]", "Category Colors", "Back" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "Settings", &menu_items);
@@ -23,7 +23,8 @@ pub fn showSettingsMenu(allocator: std.mem.Allocator) !void {
                 1 => try changeListVisibleItemsSetting(allocator),
                 2 => try changeSortSettings(allocator, .name),
                 3 => try changeSortSettings(allocator, .category),
-                4 => return,
+                4 => try manageCategoryColors(allocator),
+                5 => return,
                 else => {},
             }
         } else {
@@ -80,6 +81,100 @@ pub fn changeEditorSetting(allocator: std.mem.Allocator) !void {
     try stdout.print("\nEditor updated. Press any key to continue...", .{});
     var key_buffer: [1]u8 = undefined;
     _ = try stdin.read(&key_buffer);
+}
+
+pub fn manageCategoryColors(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    var settings = try utils.loadSettings(allocator);
+    defer settings.deinit(allocator);
+
+    const paths = try utils.getFavoritesPath(allocator);
+    defer allocator.free(paths.config_dir);
+    defer allocator.free(paths.favorites_path);
+
+    var favorites_list = try utils.loadFavorites(paths.favorites_path, allocator);
+    defer {
+        for (favorites_list.items) |item| {
+            if (item.name) |name| allocator.free(name);
+            if (item.category) |category| allocator.free(category);
+            allocator.free(item.path);
+        }
+        favorites_list.deinit();
+    }
+
+    var categories = try utils.getUniqueCategories(favorites_list, allocator);
+    defer {
+        for (categories.items) |category| {
+            allocator.free(category);
+        }
+        categories.deinit();
+    }
+
+    if (categories.items.len == 0) {
+        try utils.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
+        return;
+    }
+
+    var display_items = ArrayList([]u8).init(allocator);
+    defer {
+        for (display_items.items) |item| {
+            allocator.free(item);
+        }
+        display_items.deinit();
+    }
+
+    for (categories.items) |category| {
+        const category_color = utils.getCategoryColor(settings, category, allocator) catch null;
+        defer if (category_color) |color| allocator.free(color);
+
+        const color_name = if (category_color) |color|
+            color
+        else
+            "Default";
+
+        const ansi_color = ui.getAnsiColorFromName(color_name);
+
+        const display = try std.fmt.allocPrint(allocator, "{s}●{s} {s}", .{
+            ansi_color,
+            ui.ANSI_RESET,
+            category,
+        });
+
+        try display_items.append(display);
+    }
+
+    const category_selection = try ui.selectFromList(stdout, stdin, "Select a category to change its color", display_items.items, false);
+
+    if (category_selection) |idx| {
+        const selected_category = categories.items[idx];
+
+        const title = try std.fmt.allocPrint(allocator, "Select color for '{s}'", .{selected_category});
+        defer allocator.free(title);
+
+        const color_selection = try ui.selectColor(stdout, stdin, title);
+
+        if (color_selection) |color| {
+            if (std.mem.eql(u8, color, "Default")) {
+                try utils.removeCategoryColor(&settings, selected_category, allocator);
+                try stdout.print("\nRemoved color for category '{s}'\n", .{selected_category});
+            } else {
+                try utils.setCategoryColor(&settings, selected_category, color, allocator);
+                try stdout.print("\nSet color '{s}' for category '{s}'\n", .{ color, selected_category });
+            }
+
+            try utils.saveSettings(allocator, settings);
+
+            const settings_path = try std.fmt.allocPrint(allocator, "{s}/settings.json", .{paths.config_dir});
+            defer allocator.free(settings_path);
+            try stdout.print("\nSettings saved to: {s}\n", .{settings_path});
+
+            try stdout.print("Press any key to continue...", .{});
+            var key_buffer: [1]u8 = undefined;
+            _ = try stdin.read(&key_buffer);
+        }
+    }
 }
 
 fn addFavorite(favorites: *ArrayList(utils.Favorite), path: []const u8, allocator: std.mem.Allocator) !void {

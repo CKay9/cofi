@@ -17,12 +17,35 @@ pub const ANSI_LIGHT_GRAY = "\x1b[38;5;250m";
 pub const ANSI_MEDIUM_GRAY = "\x1b[38;5;245m";
 pub const ANSI_BLUE = "\x1b[34m";
 pub const ANSI_RED = "\x1b[31m";
+pub const ANSI_MAGENTA = "\x1b[35m";
+pub const ANSI_GREEN = "\x1b[32m";
+pub const ANSI_YELLOW = "\x1b[33m";
 pub const ANSI_CYAN = "\x1b[36m";
 pub const ANSI_FILL_LINE = "\x1b[K";
 
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
 pub var LIST_VISIBLE_ITEMS: u8 = 7;
+
+pub const AVAILABLE_COLORS = [_]struct { name: []const u8, ansi: []const u8 }{
+    .{ .name = "Default", .ansi = ANSI_RESET },
+    .{ .name = "Red", .ansi = ANSI_RED },
+    .{ .name = "Green", .ansi = ANSI_GREEN },
+    .{ .name = "Yellow", .ansi = ANSI_YELLOW },
+    .{ .name = "Blue", .ansi = ANSI_BLUE },
+    .{ .name = "Magenta", .ansi = ANSI_MAGENTA },
+    .{ .name = "Cyan", .ansi = ANSI_CYAN },
+    .{ .name = "Gray", .ansi = ANSI_GRAY },
+};
+
+pub fn getAnsiColorFromName(color_name: []const u8) []const u8 {
+    for (AVAILABLE_COLORS) |color| {
+        if (std.mem.eql(u8, color.name, color_name)) {
+            return color.ansi;
+        }
+    }
+    return ANSI_RESET;
+}
 
 var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
 
@@ -162,6 +185,9 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     const home_dir = utils.getHomeDirectory(allocator) catch "";
     defer if (home_dir.len > 0) allocator.free(home_dir);
 
+    var settings = utils.loadSettings(allocator) catch utils.Settings{};
+    defer settings.deinit(allocator);
+
     var path_buffer: [1024]u8 = undefined;
 
     const half_visible = visible_items_count / 2;
@@ -187,20 +213,48 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
         else
             parts.path;
 
+        var category: ?[]const u8 = null;
+        if (std.mem.indexOf(u8, item, " [")) |bracket_start| {
+            if (std.mem.indexOf(u8, item[bracket_start..], "]")) |bracket_end| {
+                category = item[bracket_start + 2 .. bracket_start + bracket_end];
+            }
+        }
+
         if (i == current_selection) {
             const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
 
-            try writer.print("  {s}{s}{d}  {s}{s}{s}\n", .{
-                highlight_color, // Red or cyan depending on mode
+            try writer.print("  {s}{s}{d}  {s}", .{
+                highlight_color,
                 ANSI_INVERT_ON,
                 i + 1,
                 parts.name,
+            });
+
+            if (category) |cat| {
+                const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+                defer if (category_color) |color| allocator.free(color);
+
+                try writer.print(" [{s}]", .{cat});
+            }
+
+            try writer.print("{s}{s}\n", .{
                 ANSI_FILL_LINE,
                 ANSI_INVERT_OFF,
             });
+
             try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
         } else {
-            try writer.print("  {s}{d} {s} {s}\n", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+            try writer.print("  {s}{d} {s} {s}", .{ ANSI_MEDIUM_GRAY, i + 1, ANSI_RESET, parts.name });
+
+            if (category) |cat| {
+                const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+                defer if (category_color) |color| allocator.free(color);
+
+                const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
+                try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
+            }
+
+            try writer.print("\n", .{});
             try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
         }
 
@@ -240,6 +294,92 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     try writer.print("╯\n", .{});
 
     try stdout.writeAll(output_buffer.items);
+}
+
+pub fn selectColor(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8) !?[]const u8 {
+    var color_names = [_][]const u8{undefined} ** AVAILABLE_COLORS.len;
+
+    for (AVAILABLE_COLORS, 0..) |color, i| {
+        color_names[i] = color.name;
+    }
+
+    var current_selection: usize = 0;
+
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
+
+    while (true) {
+        try renderColorMenu(stdout, title, &color_names, current_selection);
+
+        var key_buffer: [3]u8 = undefined;
+        const bytes_read = try stdin.read(&key_buffer);
+
+        if (bytes_read == 1) {
+            switch (key_buffer[0]) {
+                'j' => current_selection = @min(current_selection + 1, color_names.len - 1),
+                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                '\r', '\n' => return color_names[current_selection],
+                'q' => return null,
+                else => {},
+            }
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+            switch (key_buffer[2]) {
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, color_names.len - 1),
+                else => {},
+            }
+        }
+    }
+}
+
+pub fn renderColorMenu(stdout: std.fs.File.Writer, title: []const u8, color_names: []const []const u8, current_selection: usize) !void {
+    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
+    try stdout.print("🌽 {s} 🌽\n\n", .{title});
+
+    try renderBorder(stdout, true, false);
+
+    for (color_names, 0..) |color_name, i| {
+        const color_code = getAnsiColorFromName(color_name);
+
+        var display_buffer: [256]u8 = undefined;
+        const display_name = try std.fmt.bufPrint(&display_buffer, "{s}●{s} {s}", .{ color_code, ANSI_RESET, color_name });
+
+        try renderColorMenuItem(stdout, display_name, i == current_selection, MENU_WIDTH);
+    }
+
+    try renderBorder(stdout, false, false);
+    try renderControls(stdout, false);
+    try renderBorder(stdout, false, true);
+}
+
+pub fn renderColorMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected: bool, width: usize) !void {
+    const totalPadding = width - item.len;
+    const leftPadding = totalPadding / 2;
+    const rightPadding = totalPadding - leftPadding;
+
+    var buffer: [BOX_WIDTH]u8 = undefined;
+    var i: usize = 0;
+
+    for (0..leftPadding) |_| {
+        buffer[i] = ' ';
+        i += 1;
+    }
+
+    for (item) |char| {
+        buffer[i] = char;
+        i += 1;
+    }
+
+    for (0..rightPadding) |_| {
+        buffer[i] = ' ';
+        i += 1;
+    }
+
+    if (is_selected) {
+        try stdout.print("│    {s}{s}{s}    │\n", .{ ANSI_INVERT_ON, buffer[2 .. width - 2], ANSI_INVERT_OFF });
+    } else {
+        try stdout.print("│    {s}    │\n", .{buffer[2 .. width - 2]});
+    }
 }
 
 pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, categories: []const []const u8) !?[]const u8 {

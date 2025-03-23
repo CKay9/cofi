@@ -1,15 +1,17 @@
 const std = @import("std");
 const terminal = @import("terminal.zig");
-const utils = @import("utils.zig");
+const config = @import("config.zig");
+const files = @import("files.zig");
 const Allocator = std.mem.Allocator;
 
+// Constants for UI rendering
 pub const BOX_WIDTH = 59;
 pub const MENU_WIDTH = 53;
 pub const BORDER_WIDTH = BOX_WIDTH;
 
+// ANSI color and formatting codes
 pub const ANSI_INVERT_ON = "\x1b[7m";
 pub const ANSI_INVERT_OFF = "\x1b[27m";
-
 pub const ANSI_BOLD_YELLOW = "\x1b[1;33m";
 pub const ANSI_DIM = "\x1b[2m";
 pub const ANSI_GRAY = "\x1b[38;5;242m";
@@ -22,11 +24,13 @@ pub const ANSI_GREEN = "\x1b[32m";
 pub const ANSI_YELLOW = "\x1b[33m";
 pub const ANSI_CYAN = "\x1b[36m";
 pub const ANSI_FILL_LINE = "\x1b[K";
-
 pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
-pub var LIST_VISIBLE_ITEMS: u8 = 7;
 
+// Default and configurable values
+pub var LIST_VISIBLE_ITEMS: u8 = config.DEFAULT_LIST_VISIBLE_ITEMS;
+
+// Available colors for category highlighting
 pub const AVAILABLE_COLORS = [_]struct { name: []const u8, ansi: []const u8 }{
     .{ .name = "Default", .ansi = ANSI_RESET },
     .{ .name = "Red", .ansi = ANSI_RED },
@@ -38,6 +42,148 @@ pub const AVAILABLE_COLORS = [_]struct { name: []const u8, ansi: []const u8 }{
     .{ .name = "Gray", .ansi = ANSI_GRAY },
 };
 
+// Buffer for output to avoid multiple small writes
+var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
+
+// UI interaction functions
+pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, menu_items: []const []const u8) !?usize {
+    var current_selection: usize = 0;
+
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
+
+    while (true) {
+        try renderMenu(stdout, title, menu_items, current_selection);
+
+        var key_buffer: [3]u8 = undefined;
+        const bytes_read = try stdin.read(&key_buffer);
+
+        if (bytes_read == 1) {
+            switch (key_buffer[0]) {
+                'j' => current_selection = @min(current_selection + 1, menu_items.len - 1),
+                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                '\r', '\n' => return current_selection,
+                'q' => return null,
+                else => {},
+            }
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+            switch (key_buffer[2]) {
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, menu_items.len - 1),
+                else => {},
+            }
+        }
+    }
+}
+
+pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?usize {
+    if (items.len == 0) {
+        try stdout.print("No items available in list: {s}\n", .{title});
+        return null;
+    }
+
+    var current_selection: usize = 0;
+
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
+
+    while (true) {
+        try renderList(stdout, title, items, current_selection, is_deletion_menu);
+
+        var key_buffer: [3]u8 = undefined;
+        const bytes_read = try stdin.read(&key_buffer);
+
+        if (bytes_read == 1) {
+            switch (key_buffer[0]) {
+                'j' => current_selection = @min(current_selection + 1, items.len - 1),
+                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'g' => current_selection = 0,
+                'G' => current_selection = items.len - 1,
+                '\r', '\n' => return current_selection,
+                'q' => return null,
+                else => {},
+            }
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+            switch (key_buffer[2]) {
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, items.len - 1),
+                else => {},
+            }
+        }
+    }
+}
+
+pub fn selectColor(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8) !?[]const u8 {
+    var color_names = [_][]const u8{undefined} ** AVAILABLE_COLORS.len;
+
+    for (AVAILABLE_COLORS, 0..) |color, i| {
+        color_names[i] = color.name;
+    }
+
+    var current_selection: usize = 0;
+
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
+
+    while (true) {
+        try renderColorMenu(stdout, title, &color_names, current_selection);
+
+        var key_buffer: [3]u8 = undefined;
+        const bytes_read = try stdin.read(&key_buffer);
+
+        if (bytes_read == 1) {
+            switch (key_buffer[0]) {
+                'j' => current_selection = @min(current_selection + 1, color_names.len - 1),
+                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                '\r', '\n' => return color_names[current_selection],
+                'q' => return null,
+                else => {},
+            }
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+            switch (key_buffer[2]) {
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, color_names.len - 1),
+                else => {},
+            }
+        }
+    }
+}
+
+pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, categories: []const []const u8) !?[]const u8 {
+    if (categories.len == 0) {
+        try stdout.print("No categories available\n", .{});
+        return null;
+    }
+
+    var current_selection: usize = 0;
+
+    try terminal.enableRawMode();
+    defer terminal.disableRawMode();
+
+    while (true) {
+        try renderCenteredMenu(stdout, "Select Category", categories, current_selection);
+
+        var key_buffer: [3]u8 = undefined;
+        const bytes_read = try stdin.read(&key_buffer);
+
+        if (bytes_read == 1) {
+            switch (key_buffer[0]) {
+                'j' => current_selection = @min(current_selection + 1, categories.len - 1),
+                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                '\r', '\n' => return categories[current_selection],
+                'q' => return null,
+                else => {},
+            }
+        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
+            switch (key_buffer[2]) {
+                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
+                'B' => current_selection = @min(current_selection + 1, categories.len - 1),
+                else => {},
+            }
+        }
+    }
+}
+
 pub fn getAnsiColorFromName(color_name: []const u8) []const u8 {
     for (AVAILABLE_COLORS) |color| {
         if (std.mem.eql(u8, color.name, color_name)) {
@@ -47,46 +193,13 @@ pub fn getAnsiColorFromName(color_name: []const u8) []const u8 {
     return ANSI_RESET;
 }
 
-var output_buffer = std.ArrayList(u8).init(std.heap.page_allocator);
-
-pub fn initializeListVisibleItems(allocator: std.mem.Allocator) !void {
-    var settings = try utils.loadSettings(allocator);
+pub fn initializeListVisibleItems(allocator: Allocator) !void {
+    var settings = try config.loadSettings(allocator);
     defer settings.deinit(allocator);
 
     if (settings.list_visible_items) |count| {
         LIST_VISIBLE_ITEMS = count;
-        const stdout = std.io.getStdOut().writer();
-        try stdout.print("Loaded LIST_VISIBLE_ITEMS from settings: {d}\n", .{count});
     }
-}
-
-pub fn runInstallScript() !void {
-    const stdout = std.io.getStdOut().writer();
-
-    try stdout.print("\n🔄 Running installation script...\n", .{});
-
-    var child = std.process.Child.init(&[_][]const u8{ "/bin/bash", ".cofi_install.sh" }, std.heap.page_allocator);
-
-    child.stdin_behavior = .Inherit;
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-
-    _ = try child.spawnAndWait();
-}
-
-pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
-    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
-    try stdout.print("🌽 {s} 🌽\n\n", .{title});
-
-    try renderBorder(stdout, true, false);
-
-    for (menu_items, 0..) |item, i| {
-        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
-    }
-
-    try renderBorder(stdout, false, false);
-    try renderControls(stdout, false);
-    try renderBorder(stdout, false, true);
 }
 
 pub fn renderBorder(stdout: std.fs.File.Writer, is_top: bool, is_bottom: bool) !void {
@@ -159,35 +272,70 @@ pub fn renderMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected:
     }
 }
 
-pub fn renderMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
+pub fn renderColorMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected: bool, width: usize) !void {
+    const totalPadding = width - item.len;
+    const leftPadding = totalPadding / 2;
+    const rightPadding = totalPadding - leftPadding;
+
+    var buffer: [BOX_WIDTH]u8 = undefined;
+    var i: usize = 0;
+
+    for (0..leftPadding) |_| {
+        buffer[i] = ' ';
+        i += 1;
+    }
+
+    for (item) |char| {
+        buffer[i] = char;
+        i += 1;
+    }
+
+    for (0..rightPadding) |_| {
+        buffer[i] = ' ';
+        i += 1;
+    }
+
+    if (is_selected) {
+        try stdout.print("│    {s}{s}{s}    │\n", .{ ANSI_INVERT_ON, buffer[2 .. width - 2], ANSI_INVERT_OFF });
+    } else {
+        try stdout.print("│    {s}    │\n", .{buffer[2 .. width - 2]});
+    }
+}
+
+pub fn renderColorMenu(stdout: std.fs.File.Writer, title: []const u8, color_names: []const []const u8, current_selection: usize) !void {
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
     try stdout.print("🌽 {s} 🌽\n\n", .{title});
 
     try renderBorder(stdout, true, false);
 
-    for (menu_items, 0..) |item, i| {
-        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
+    for (color_names, 0..) |color_name, i| {
+        const color_code = getAnsiColorFromName(color_name);
+
+        var display_buffer: [256]u8 = undefined;
+        const display_name = try std.fmt.bufPrint(&display_buffer, "{s}●{s} {s}", .{ color_code, ANSI_RESET, color_name });
+
+        try renderColorMenuItem(stdout, display_name, i == current_selection, MENU_WIDTH);
     }
 
     try renderBorder(stdout, false, false);
-    try renderControls(stdout, true);
+    try renderControls(stdout, false);
     try renderBorder(stdout, false, true);
 }
 
-pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, visible_items_count: usize, is_deletion_menu: bool) !void {
+pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, is_deletion_menu: bool) !void {
     output_buffer.clearRetainingCapacity();
     var writer = output_buffer.writer();
 
     try writer.print("{s}\n{s}:\n\n", .{ ANSI_CLEAR_SCREEN, title });
 
     const allocator = std.heap.page_allocator;
-    const home_dir = utils.getHomeDirectory(allocator) catch "";
+    const home_dir = config.getHomeDirectory(allocator) catch "";
     defer if (home_dir.len > 0) allocator.free(home_dir);
 
-    var settings = utils.loadSettings(allocator) catch utils.Settings{};
+    var settings = config.loadSettings(allocator) catch config.Settings{};
     defer settings.deinit(allocator);
 
-    const visible_range = calculateVisibleRange(items.len, current_selection, visible_items_count);
+    const visible_range = calculateVisibleRange(items.len, current_selection, LIST_VISIBLE_ITEMS);
     const start_idx = visible_range.start;
     const end_idx = visible_range.end;
 
@@ -225,9 +373,9 @@ fn calculateVisibleRange(total_items: usize, current_selection: usize, visible_i
     return .{ .start = start_idx, .end = end_idx };
 }
 
-fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: utils.Settings, is_deletion_menu: bool, allocator: std.mem.Allocator) !void {
+fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: config.Settings, is_deletion_menu: bool, allocator: Allocator) !void {
     var path_buffer: [1024]u8 = undefined;
-    var parts = utils.splitPathAndName(item);
+    var parts = files.splitPathAndName(item);
 
     const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
         std.fmt.bufPrint(&path_buffer, "{s}", .{parts.path[home_dir.len..]}) catch parts.path
@@ -247,28 +395,28 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         try writer.print("  {s}{s}{d}  {s}", .{ highlight_color, ANSI_INVERT_ON, index + 1, parts.name });
 
         if (category) |cat| {
-            const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+            const category_color = config.getCategoryColor(settings, cat, allocator) catch null;
             defer if (category_color) |color| allocator.free(color);
 
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
-            try writer.print(" [{s}{s}{s}]", .{ color_code, cat, ANSI_RESET });
+            try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
         }
 
         try writer.print("{s}{s}\n", .{ ANSI_FILL_LINE, ANSI_INVERT_OFF });
         try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
     } else {
-        try writer.print("  {s}{d} {s} {s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, parts.name });
+        try writer.print("  {s}{d} {s}{s}", .{ ANSI_MEDIUM_GRAY, index + 1, ANSI_RESET, parts.name });
 
         if (category) |cat| {
-            const category_color = utils.getCategoryColor(settings, cat, allocator) catch null;
+            const category_color = config.getCategoryColor(settings, cat, allocator) catch null;
             defer if (category_color) |color| allocator.free(color);
 
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
-            try writer.print(" [{s}{s}{s}]", .{ color_code, cat, ANSI_RESET });
+            try writer.print(" {s}[{s}]{s}", .{ color_code, cat, ANSI_RESET });
         }
 
         try writer.print("\n", .{});
-        try writer.print("     ~{s}{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+        try writer.print("     {s}~{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
     }
 }
 
@@ -301,55 +449,14 @@ fn renderListFooter(writer: std.ArrayList(u8).Writer, current_selection: usize, 
     try writer.print("╯\n", .{});
 }
 
-pub fn selectColor(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8) !?[]const u8 {
-    var color_names = [_][]const u8{undefined} ** AVAILABLE_COLORS.len;
-
-    for (AVAILABLE_COLORS, 0..) |color, i| {
-        color_names[i] = color.name;
-    }
-
-    var current_selection: usize = 0;
-
-    try terminal.enableRawMode();
-    defer terminal.disableRawMode();
-
-    while (true) {
-        try renderColorMenu(stdout, title, &color_names, current_selection);
-
-        var key_buffer: [3]u8 = undefined;
-        const bytes_read = try stdin.read(&key_buffer);
-
-        if (bytes_read == 1) {
-            switch (key_buffer[0]) {
-                'j' => current_selection = @min(current_selection + 1, color_names.len - 1),
-                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                '\r', '\n' => return color_names[current_selection],
-                'q' => return null,
-                else => {},
-            }
-        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
-            switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'B' => current_selection = @min(current_selection + 1, color_names.len - 1),
-                else => {},
-            }
-        }
-    }
-}
-
-pub fn renderColorMenu(stdout: std.fs.File.Writer, title: []const u8, color_names: []const []const u8, current_selection: usize) !void {
+pub fn renderCenteredMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
     try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
     try stdout.print("🌽 {s} 🌽\n\n", .{title});
 
     try renderBorder(stdout, true, false);
 
-    for (color_names, 0..) |color_name, i| {
-        const color_code = getAnsiColorFromName(color_name);
-
-        var display_buffer: [256]u8 = undefined;
-        const display_name = try std.fmt.bufPrint(&display_buffer, "{s}●{s} {s}", .{ color_code, ANSI_RESET, color_name });
-
-        try renderColorMenuItem(stdout, display_name, i == current_selection, MENU_WIDTH);
+    for (menu_items, 0..) |item, i| {
+        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
     }
 
     try renderBorder(stdout, false, false);
@@ -357,144 +464,17 @@ pub fn renderColorMenu(stdout: std.fs.File.Writer, title: []const u8, color_name
     try renderBorder(stdout, false, true);
 }
 
-pub fn renderColorMenuItem(stdout: std.fs.File.Writer, item: []const u8, is_selected: bool, width: usize) !void {
-    const totalPadding = width - item.len;
-    const leftPadding = totalPadding / 2;
-    const rightPadding = totalPadding - leftPadding;
+pub fn renderMenu(stdout: std.fs.File.Writer, title: []const u8, menu_items: []const []const u8, current_selection: usize) !void {
+    try stdout.print("{s}", .{ANSI_CLEAR_SCREEN});
+    try stdout.print("🌽 {s} 🌽\n\n", .{title});
 
-    var buffer: [BOX_WIDTH]u8 = undefined;
-    var i: usize = 0;
+    try renderBorder(stdout, true, false);
 
-    for (0..leftPadding) |_| {
-        buffer[i] = ' ';
-        i += 1;
+    for (menu_items, 0..) |item, i| {
+        try renderMenuItem(stdout, item, i == current_selection, MENU_WIDTH);
     }
 
-    for (item) |char| {
-        buffer[i] = char;
-        i += 1;
-    }
-
-    for (0..rightPadding) |_| {
-        buffer[i] = ' ';
-        i += 1;
-    }
-
-    if (is_selected) {
-        try stdout.print("│    {s}{s}{s}    │\n", .{ ANSI_INVERT_ON, buffer[2 .. width - 2], ANSI_INVERT_OFF });
-    } else {
-        try stdout.print("│    {s}    │\n", .{buffer[2 .. width - 2]});
-    }
-}
-
-pub fn selectCategory(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, categories: []const []const u8) !?[]const u8 {
-    if (categories.len == 0) {
-        try stdout.print("No categories available\n", .{});
-        return null;
-    }
-
-    var current_selection: usize = 0;
-
-    try terminal.enableRawMode();
-    defer terminal.disableRawMode();
-
-    while (true) {
-        try renderCenteredMenu(stdout, "Select Category", categories, current_selection);
-
-        var key_buffer: [3]u8 = undefined;
-        const bytes_read = try stdin.read(&key_buffer);
-
-        if (bytes_read == 1) {
-            switch (key_buffer[0]) {
-                'j' => current_selection = @min(current_selection + 1, categories.len - 1),
-                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                '\r', '\n' => return categories[current_selection],
-                'q' => return null,
-                else => {},
-            }
-        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
-            switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'B' => current_selection = @min(current_selection + 1, categories.len - 1),
-                else => {},
-            }
-        }
-    }
-}
-
-pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, menu_items: []const []const u8) !?usize {
-    var current_selection: usize = 0;
-
-    try terminal.enableRawMode();
-    defer terminal.disableRawMode();
-
-    while (true) {
-        try renderMenu(stdout, title, menu_items, current_selection);
-
-        var key_buffer: [3]u8 = undefined;
-        const bytes_read = try stdin.read(&key_buffer);
-
-        if (bytes_read == 1) {
-            switch (key_buffer[0]) {
-                'j' => current_selection = @min(current_selection + 1, menu_items.len - 1),
-                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                '\r', '\n' => return current_selection,
-                'q' => return null,
-                'r' => {
-                    terminal.disableRawMode();
-                    try runInstallScript();
-                    try terminal.enableRawMode();
-                },
-                else => {},
-            }
-        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
-            switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'B' => current_selection = @min(current_selection + 1, menu_items.len - 1),
-                else => {},
-            }
-        }
-    }
-}
-
-pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?usize {
-    if (items.len == 0) {
-        try stdout.print("No items available in list: {s}\n", .{title});
-        return null;
-    }
-
-    var current_selection: usize = 0;
-
-    try terminal.enableRawMode();
-    defer terminal.disableRawMode();
-
-    while (true) {
-        try renderList(stdout, title, items, current_selection, LIST_VISIBLE_ITEMS, is_deletion_menu);
-
-        var key_buffer: [3]u8 = undefined;
-        const bytes_read = try stdin.read(&key_buffer);
-
-        if (bytes_read == 1) {
-            switch (key_buffer[0]) {
-                'j' => current_selection = @min(current_selection + 1, items.len - 1),
-                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'g' => current_selection = 0,
-                'G' => current_selection = items.len - 1,
-                '\r', '\n' => return current_selection,
-                'q' => return null,
-                'r' => {
-                    terminal.disableRawMode();
-                    try runInstallScript();
-                    try terminal.enableRawMode();
-                },
-                else => {},
-            }
-        } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
-            switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'B' => current_selection = @min(current_selection + 1, items.len - 1),
-                else => {},
-            }
-        }
-    }
+    try renderBorder(stdout, false, false);
+    try renderControls(stdout, true);
+    try renderBorder(stdout, false, true);
 }

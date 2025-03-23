@@ -2,7 +2,8 @@ const std = @import("std");
 const process = std.process;
 const fs = std.fs;
 const core = @import("modules/core.zig");
-const utils = @import("modules/utils.zig");
+const config = @import("modules/config.zig");
+const files = @import("modules/files.zig");
 const help = @import("modules/help.zig");
 const ui = @import("modules/ui.zig");
 const ArrayList = std.ArrayList;
@@ -32,7 +33,7 @@ pub fn main() !void {
                 try listFavorites(allocator);
                 return;
             } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
-                try stdout.print("cofi version 0.4.0\n", .{});
+                try help.printVersion(stdout);
                 return;
             } else {
                 const error_msg = try std.fmt.allocPrint(allocator, "Unknown flag '{s}'", .{arg});
@@ -47,7 +48,7 @@ pub fn main() !void {
                 const error_msg = try std.fmt.allocPrint(allocator, "Invalid argument '{s}'. Expected a number.", .{arg});
                 defer allocator.free(error_msg);
                 try help.printErrorAndHelp(stdout, error_msg);
-                try utils.handleError(stdout, stdin, "");
+                try files.handleError(stdout, stdin, "");
                 return;
             };
 
@@ -58,17 +59,21 @@ pub fn main() !void {
     }
 }
 
-fn listFavorites(allocator: std.mem.Allocator) !void {
+/// List all favorites in a simple format
+fn listFavorites(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    const paths = try utils.getFavoritesPath(allocator);
-    defer allocator.free(paths.config_dir);
-    defer allocator.free(paths.favorites_path);
+    const paths = try config.getConfigPaths(allocator);
+    defer {
+        allocator.free(paths.config_dir);
+        allocator.free(paths.favorites_path);
+        allocator.free(paths.settings_path);
+    }
 
-    try utils.initializeFavoritesFile(paths.favorites_path, allocator);
+    try files.initializeFavoritesFile(paths.favorites_path, allocator);
 
-    var favorites_list = try utils.loadFavorites(paths.favorites_path, allocator);
+    var favorites_list = try files.loadFavorites(paths.favorites_path, allocator);
     defer {
         for (favorites_list.items) |item| {
             if (item.name) |name| allocator.free(name);
@@ -79,7 +84,7 @@ fn listFavorites(allocator: std.mem.Allocator) !void {
     }
 
     if (favorites_list.items.len == 0) {
-        try utils.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
+        try files.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
         return;
     }
 
@@ -105,17 +110,21 @@ fn listFavorites(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
+/// Open a specific favorite by index
+fn openSpecificFavorite(allocator: Allocator, index: usize) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
-    const paths = try utils.getFavoritesPath(allocator);
-    defer allocator.free(paths.config_dir);
-    defer allocator.free(paths.favorites_path);
+    const paths = try config.getConfigPaths(allocator);
+    defer {
+        allocator.free(paths.config_dir);
+        allocator.free(paths.favorites_path);
+        allocator.free(paths.settings_path);
+    }
 
-    try utils.initializeFavoritesFile(paths.favorites_path, allocator);
+    try files.initializeFavoritesFile(paths.favorites_path, allocator);
 
-    var favorites_list = try utils.loadFavorites(paths.favorites_path, allocator);
+    var favorites_list = try files.loadFavorites(paths.favorites_path, allocator);
     defer {
         for (favorites_list.items) |item| {
             if (item.name) |name| allocator.free(name);
@@ -126,16 +135,16 @@ fn openSpecificFavorite(allocator: std.mem.Allocator, index: usize) !void {
     }
 
     if (favorites_list.items.len == 0) {
-        try utils.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
+        try files.handleError(stdout, stdin, "No favorites found. Add some favorites first.");
         return;
     }
 
     if (index < 1 or index > favorites_list.items.len) {
-        try utils.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Favorite index {d} out of range. Available range: 1-{d}", .{ index, favorites_list.items.len }));
+        try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Favorite index {d} out of range. Available range: 1-{d}", .{ index, favorites_list.items.len }));
         return;
     }
 
     const zero_based_index = index - 1;
 
-    try utils.openWithEditor(favorites_list.items[zero_based_index].path, allocator);
+    try files.openWithEditor(favorites_list.items[zero_based_index].path, allocator);
 }

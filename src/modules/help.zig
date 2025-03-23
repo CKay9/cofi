@@ -1,5 +1,7 @@
 const std = @import("std");
 
+pub const VERSION = "0.4.0";
+
 pub const BASIC_HELP =
     \\🌽 cofi - Config File Manager 🌽
     \\
@@ -25,4 +27,8 @@ pub fn printHelp(writer: std.fs.File.Writer) !void {
 pub fn printErrorAndHelp(writer: std.fs.File.Writer, err_msg: []const u8) !void {
     try writer.print("Error: {s}\n\n", .{err_msg});
     try printHelp(writer);
+}
+
+pub fn printVersion(writer: std.fs.File.Writer) !void {
+    try writer.print("cofi version {s}\n", .{VERSION});
 }

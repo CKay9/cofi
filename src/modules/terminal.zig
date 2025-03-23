@@ -7,6 +7,7 @@ const termios = @cImport({
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
 
+/// Enables raw mode for terminal input handling
 pub fn enableRawMode() !void {
     var raw: termios.termios = undefined;
     _ = termios.tcgetattr(0, &raw);
@@ -17,6 +18,7 @@ pub fn enableRawMode() !void {
     try stdout.writeAll(HIDE_CURSOR);
 }
 
+/// Restores normal terminal mode
 pub fn disableRawMode() void {
     var raw: termios.termios = undefined;
     _ = termios.tcgetattr(0, &raw);

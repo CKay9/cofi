@@ -122,12 +122,14 @@ pub fn loadSettings(allocator: Allocator) !Settings {
 
     if (parsed.value.category_colors) |colors| {
         const new_colors = try allocator.alloc(CategoryColor, colors.len);
+
         for (colors, 0..) |color, i| {
             new_colors[i] = CategoryColor{
                 .name = try allocator.dupe(u8, color.name),
                 .color = try allocator.dupe(u8, color.color),
             };
         }
+
         settings.category_colors = new_colors;
     }
 
@@ -192,13 +194,22 @@ pub fn setCategoryColor(settings: *Settings, category: []const u8, color: []cons
 
         var new_colors = try allocator.alloc(CategoryColor, colors.len + 1);
 
-        @memcpy(new_colors[0..colors.len], colors);
+        for (colors, 0..) |cat_color, i| {
+            new_colors[i] = CategoryColor{
+                .name = try allocator.dupe(u8, cat_color.name),
+                .color = try allocator.dupe(u8, cat_color.color),
+            };
+        }
 
         new_colors[colors.len] = CategoryColor{
             .name = try allocator.dupe(u8, category),
             .color = try allocator.dupe(u8, color),
         };
 
+        for (colors) |*cat_color| {
+            allocator.free(cat_color.name);
+            allocator.free(cat_color.color);
+        }
         allocator.free(colors);
 
         settings.category_colors = new_colors;
@@ -215,6 +226,7 @@ pub fn setCategoryColor(settings: *Settings, category: []const u8, color: []cons
 pub fn removeCategoryColor(settings: *Settings, category: []const u8, allocator: Allocator) !void {
     if (settings.category_colors) |colors| {
         var found_idx: ?usize = null;
+
         for (colors, 0..) |color, i| {
             if (std.mem.eql(u8, color.name, category)) {
                 found_idx = i;
@@ -223,7 +235,8 @@ pub fn removeCategoryColor(settings: *Settings, category: []const u8, allocator:
         }
 
         if (found_idx) |idx| {
-            colors[idx].deinit(allocator);
+            allocator.free(colors[idx].name);
+            allocator.free(colors[idx].color);
 
             if (colors.len == 1) {
                 allocator.free(colors);
@@ -233,14 +246,23 @@ pub fn removeCategoryColor(settings: *Settings, category: []const u8, allocator:
 
             var new_colors = try allocator.alloc(CategoryColor, colors.len - 1);
 
-            if (idx > 0) {
-                @memcpy(new_colors[0..idx], colors[0..idx]);
+            var dest_idx: usize = 0;
+            for (0..colors.len) |i| {
+                if (i != idx) {
+                    new_colors[dest_idx] = CategoryColor{
+                        .name = try allocator.dupe(u8, colors[i].name),
+                        .color = try allocator.dupe(u8, colors[i].color),
+                    };
+                    dest_idx += 1;
+                }
             }
 
-            if (idx < colors.len - 1) {
-                @memcpy(new_colors[idx..], colors[idx + 1 ..]);
+            for (colors, 0..) |color, i| {
+                if (i != idx) {
+                    allocator.free(color.name);
+                    allocator.free(color.color);
+                }
             }
-
             allocator.free(colors);
 
             settings.category_colors = new_colors;

@@ -1,27 +1,30 @@
 # 🌽 Cornfield (cofi)
 
-**A cleaner alternative to maintaining aliases or scripts**
+**A cleaner alternative to maintaining aliases or scripts for configuration files**
 
-Cofi is a lightweight, fast terminal utility for managing and accessing your configuration files. Stop digging through directories and remembering paths - cofi helps you find and quickly edit your most important config files.
+Cofi is a lightweight, fast terminal utility that helps you manage and quickly access your configuration files. Stop digging through directories and remembering complex paths - cofi makes your most important config files easily accessible from anywhere in your terminal.
 
 ## Demo
 
 ![cofi in action](./images/cofi.gif)
 
-## Features
+## Key Features
 
-- Central management of all your configuration files
-- Interactive terminal UI with vim-like keybindings (j/k navigation, arrow keys support)
-- Add, view, and remove favorite config files via the interactive menu
-- Add custom names to your config files for easier identification
-- Organize configs with optional categories
-- Filter configurations by category
-- Directly open a specific favorite by index (e.g., `cofi 1`)
-- Auto-detection of your preferred editor from environment variables
-- Custom editor settings via the settings menu
-- Quick list view of all your favorites with `cofi -l` or `cofi --list`
-- File path expansion with tilde (~) support
-- Clean, visual menus with intuitive navigation
+- **Centralized Management**: Store all your important config files in one accessible place
+- **Interactive TUI**: Clean terminal interface with vim-like navigation (j/k or arrow keys)
+- **Customizable Organization**:
+  - Add custom names to configs for easier identification
+  - Organize configs with categories
+  - Filter configurations by category
+  - Color-code categories for visual distinction
+- **Fast Access**:
+  - Open favorites directly by index number (e.g., `cofi 2`)
+  - Quick list view with `cofi -l` or `cofi --list`
+- **Smart Editor Integration**:
+  - Auto-detects preferred editor from environment variables
+  - Customizable editor settings via the settings menu
+- **Path Handling**: File path expansion with tilde (~) support
+- **Sorting Options**: Sort by name or category, ascending or descending
 
 ## Installation
 

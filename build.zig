@@ -9,9 +9,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
-    // Installiere das Artifact wie üblich
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

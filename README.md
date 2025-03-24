@@ -31,6 +31,7 @@ Cofi is a lightweight, fast terminal utility that helps you manage and quickly a
 ### Prerequisites
 - [Zig 0.15.0-dev](https://ziglang.org/download/) or later
 - A Unix-like operating system (Linux, macOS)
+- On Linux systems, you'll need C development headers: install with `sudo pacman -S glibc base-devel` on Arch Linux or `sudo apt install build-essential` on Debian/Ubuntu
 
 ### Installation from Source
 ```bash
@@ -41,18 +42,35 @@ cd cofi
 # Build the project
 zig build
 
-# Install to your bin directory
+# Option 1: Install to your personal bin directory
 mkdir -p ~/bin
 cp zig-out/bin/cofi ~/bin/
 chmod +x ~/bin/cofi
+
+# Option 2: Install system-wide (requires sudo privileges)
+sudo cp zig-out/bin/cofi /usr/local/bin/
+sudo chmod +x /usr/local/bin/cofi
 ```
 
-### Adding to PATH
-To use cofi from anywhere, make sure `~/bin` is in your PATH by adding this to your shell configuration file:
+### Adding to PATH (Only needed for Option 1)
+If you used Option 1 to install to your personal bin directory, make sure `~/bin` is in your PATH by adding this to your shell configuration file (`.bashrc`, `.zshrc`, etc.):
 
 ```bash
 export PATH="$HOME/bin:$PATH"
 ```
+
+After adding this line, reload your shell configuration:
+```bash
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+### Verifying Installation
+To verify that cofi is properly installed, run:
+```bash
+cofi -v
+```
+
+This should display the version of cofi.
 
 ## Usage
 
@@ -91,6 +109,19 @@ Cofi stores your favorites in `~/.config/cofi/favorites.json` and settings in `~
 
 ### Settings
 You can customize your editor preference in the settings menu or directly edit the settings file. If no custom editor is set, cofi will use your `$EDITOR` environment variable or default to `nano`.
+
+## Troubleshooting
+
+### Command Not Found
+If you get a "command not found" error after installation, make sure:
+- The binary exists in the location you copied it to
+- The location is in your PATH
+- The binary has executable permissions (`chmod +x`)
+
+### Build Errors on Linux
+If you encounter build errors related to missing C headers, make sure you have the necessary development packages installed:
+- Arch Linux: `sudo pacman -S glibc base-devel`
+- Ubuntu/Debian: `sudo apt install build-essential`
 
 ## Contributing
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

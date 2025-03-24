@@ -60,7 +60,7 @@ Thank you for your interest in contributing to cofi! This document provides guid
 
 - `src/main.zig`: The main entry point for the application
 - `src/modules/`: Directory containing auxiliary modules
-  - `favorites.zig`: Module for managing favorite config files
+  - `files.zig`: Module for managing favorite config files
 
 ## Known Issues and Future Improvements
 

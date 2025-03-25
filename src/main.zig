@@ -6,6 +6,8 @@ const config = @import("modules/config.zig");
 const files = @import("modules/files.zig");
 const help = @import("modules/help.zig");
 const ui = @import("modules/ui.zig");
+const icons = @import("modules/icons.zig");
+const debug = @import("modules/debug.zig");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -13,6 +15,28 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
+
+    // Initialize debug logger
+    try debug.init();
+    defer debug.deinit();
+
+    // Test icons display - log to file
+    debug.log("=== Icon Display Test ===", .{});
+
+    // Test with common file types
+    const test_files = [_][]const u8{
+        "/home/user/config.json",
+        "/home/user/script.py",
+        "/home/user/document.md",
+        "/home/user/code.zig",
+        "/home/user/.bashrc",
+    };
+
+    for (test_files) |file| {
+        const icon = icons.getIconForFile(file);
+        const ext = std.fs.path.extension(file);
+        debug.log("File: {s}, Extension: {s}, Icon: {s}", .{ file, ext, icon });
+    }
 
     try ui.initializeListVisibleItems(allocator);
 
@@ -90,18 +114,21 @@ fn listFavorites(allocator: Allocator) !void {
     try stdout.print("🌽 cofi - Favorites List 🌽\n\n", .{});
 
     for (favorites_list.items) |fav| {
+        const icon = icons.getIconForFile(fav.path);
+        debug.log("List view - Path: {s}, Icon: {s}", .{ fav.path, icon });
+
         if (fav.name) |name| {
             if (fav.category) |category| {
-                try stdout.print("[{d}] {s} [{s}]\n", .{ fav.id, name, category });
+                try stdout.print("[{d}] {s}{s} [{s}]\n", .{ fav.id, icon, name, category });
             } else {
-                try stdout.print("[{d}] {s}\n", .{ fav.id, name });
+                try stdout.print("[{d}] {s}{s}\n", .{ fav.id, icon, name });
             }
         } else {
             const basename = std.fs.path.basename(fav.path);
             if (fav.category) |category| {
-                try stdout.print("[{d}] {s} [{s}]\n", .{ fav.id, basename, category });
+                try stdout.print("[{d}] {s}{s} [{s}]\n", .{ fav.id, icon, basename, category });
             } else {
-                try stdout.print("[{d}] {s}\n", .{ fav.id, basename });
+                try stdout.print("[{d}] {s}{s}\n", .{ fav.id, icon, basename });
             }
         }
     }
@@ -137,6 +164,7 @@ fn openSpecificFavorite(allocator: Allocator, id: u32) !void {
 
     for (favorites_list.items) |fav| {
         if (fav.id == id) {
+            debug.log("Opening favorite ID {d} with path {s}", .{ id, fav.path });
             try files.openWithEditor(fav.path, allocator);
             return;
         }

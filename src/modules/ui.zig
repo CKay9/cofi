@@ -2,6 +2,8 @@ const std = @import("std");
 const terminal = @import("terminal.zig");
 const config = @import("config.zig");
 const files = @import("files.zig");
+const icons = @import("icons.zig");
+const debug = @import("debug.zig");
 const Allocator = std.mem.Allocator;
 
 pub const BOX_WIDTH = 59;
@@ -414,6 +416,12 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         }
     }
 
+    // Get the icon for this file
+    const icon = icons.getIconForFile(parts.path);
+
+    // Log to debug file
+    debug.log("Rendering item - Path: {s}, Icon: {s}", .{ parts.path, icon });
+
     if (index == current_selection) {
         const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
 
@@ -428,10 +436,10 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
             defer if (cat_fmt.len > 0) allocator.free(cat_fmt);
 
             const line_width = TERMINAL_WIDTH - 10;
-            const prefix_len = 2 + 5 + 1 + clean_name.len;
+            const prefix_len = 2 + 5 + clean_name.len;
             const spaces_needed = line_width - prefix_len - cat_fmt.len;
 
-            try writer.print("{s}{s}[{d}] {s}", .{ highlight_color, ANSI_INVERT_ON, id, clean_name });
+            try writer.print("{s}{s}[{d}] {s}{s}", .{ highlight_color, ANSI_INVERT_ON, id, icon, clean_name });
 
             for (0..spaces_needed) |_| {
                 try writer.print(" ", .{});
@@ -439,7 +447,7 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
 
             try writer.print("{s}[{s}]{s}{s}\n", .{ color_code, cat, highlight_color, ANSI_INVERT_OFF });
         } else {
-            try writer.print("{s}{s}[{d}] {s}{s}{s}\n", .{ highlight_color, ANSI_INVERT_ON, id, clean_name, ANSI_INVERT_OFF, ANSI_FILL_LINE });
+            try writer.print("{s}{s}[{d}] {s}{s}{s}{s}\n", .{ highlight_color, ANSI_INVERT_ON, id, icon, clean_name, ANSI_INVERT_OFF, ANSI_FILL_LINE });
         }
 
         try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
@@ -455,10 +463,10 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
             defer if (cat_fmt.len > 0) allocator.free(cat_fmt);
 
             const line_width = TERMINAL_WIDTH - 10;
-            const prefix_len = 2 + 5 + 1 + clean_name.len;
+            const prefix_len = 2 + 5 + clean_name.len;
             const spaces_needed = line_width - prefix_len - cat_fmt.len;
 
-            try writer.print("{s}[{d}]{s} {s}", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, clean_name });
+            try writer.print("{s}[{d}]{s} {s}{s}", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, icon, clean_name });
 
             for (0..spaces_needed) |_| {
                 try writer.print(" ", .{});
@@ -466,7 +474,7 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
 
             try writer.print("{s}[{s}]{s}\n", .{ color_code, cat, ANSI_RESET });
         } else {
-            try writer.print("{s}[{d}]{s} {s}\n", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, clean_name });
+            try writer.print("{s}[{d}]{s} {s}{s}\n", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, icon, clean_name });
         }
 
         try writer.print("     {s}~{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });

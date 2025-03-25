@@ -1,37 +1,34 @@
-# 🌽 Cornfield (cofi)
+# 🌽 cofi
 
-**A cleaner alternative to maintaining aliases or scripts for configuration files**
+**A fast terminal utility for configuration file management, built with Zig**
 
-Cofi is a lightweight, fast terminal utility that helps you manage and quickly access your configuration files. Stop digging through directories and remembering complex paths - cofi makes your most important config files easily accessible from anywhere in your terminal.
+cofi is a fast terminal utility that helps you manage and quickly access your configuration files. It eliminates the need to navigate complex directory structures or remember long paths when accessing frequently used config files.
+
+## Key Features
+
+- **Fast Access**: Open any saved config file with `cofi <number>`
+- **Terminal Interface**: Clean TUI with vim-like navigation (j/k or arrow keys)
+- **Organization Features**:
+  - Custom names for easier identification
+  - Category-based grouping
+  - Color-coding for visual distinction
+- **Technical Advantages**:
+  - Built with Zig for exceptional speed and reliability
+  - Single executable with no dependencies
+  - Integration with your preferred editor ($EDITOR)
+  - Fast startup time
+  - Path handling with tilde (~) expansion
 
 ## Demo
 
 ![cofi in action](./images/cofi.gif)
-
-## Key Features
-
-- **Centralized Management**: Store all your important config files in one accessible place
-- **Interactive TUI**: Clean terminal interface with vim-like navigation (j/k or arrow keys)
-- **Customizable Organization**:
-  - Add custom names to configs for easier identification
-  - Organize configs with categories
-  - Filter configurations by category
-  - Color-code categories for visual distinction
-- **Fast Access**:
-  - Open favorites directly by index number (e.g., `cofi 2`)
-  - Quick list view with `cofi -l` or `cofi --list`
-- **Smart Editor Integration**:
-  - Auto-detects preferred editor from environment variables
-  - Customizable editor settings via the settings menu
-- **Path Handling**: File path expansion with tilde (~) support
-- **Sorting Options**: Sort by name or category, ascending or descending
 
 ## Installation
 
 ### Prerequisites
 - [Zig 0.15.0-dev](https://ziglang.org/download/) or later
 - A Unix-like operating system (Linux, macOS)
-- On Linux systems, you'll need C development headers: install with `sudo pacman -S glibc base-devel` on Arch Linux or `sudo apt install build-essential` on Debian/Ubuntu
+- On Linux: `sudo pacman -S glibc base-devel` (Arch) or `sudo apt install build-essential` (Debian/Ubuntu)
 
 ### Installation from Source
 ```bash
@@ -42,86 +39,64 @@ cd cofi
 # Build the project
 zig build
 
-# Option 1: Install to your personal bin directory
+# Install to your personal bin directory
 mkdir -p ~/bin
 cp zig-out/bin/cofi ~/bin/
 chmod +x ~/bin/cofi
 
-# Option 2: Install system-wide (requires sudo privileges)
-sudo cp zig-out/bin/cofi /usr/local/bin/
-sudo chmod +x /usr/local/bin/cofi
-```
-
-### Adding to PATH (Only needed for Option 1)
-If you used Option 1 to install to your personal bin directory, make sure `~/bin` is in your PATH by adding this to your shell configuration file (`.bashrc`, `.zshrc`, etc.):
-
-```bash
-export PATH="$HOME/bin:$PATH"
-```
-
-After adding this line, reload your shell configuration:
-```bash
-source ~/.bashrc  # or source ~/.zshrc
+# Add to PATH if needed
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc  # or your shell's config
 ```
 
 ### Verifying Installation
-To verify that cofi is properly installed, run:
 ```bash
-cofi -v
+cofi -v  # Should display the version number
 ```
-
-This should display the version of cofi.
 
 ## Usage
 
-### Interactive Mode
-To launch the interactive menu:
+### Basic Commands
 ```bash
-cofi
+cofi           # Start the interactive menu
+cofi 3         # Directly open config with ID 3
+cofi -l        # List all registered files
+cofi -h        # Show help information
+cofi -v        # Display version information
 ```
 
-### Direct Access
-To directly open a favorite config file by its index:
-```bash
-cofi 1  # Opens the first config file in your favorites
-```
-
-### List All Favorites
-To quickly view all registered files:
-```bash
-cofi -l, --list
-```
-
-### Other Commands
-```bash
-cofi -h, --help     # Show help information
-cofi -v, --version  # Display version information
-```
-
-### Keyboard Navigation
-- `j` or down arrow - Move down in menus
-- `k` or up arrow - Move up in menus
+### Navigation
+- `j` or down arrow - Move down 
+- `k` or up arrow - Move up
 - `Enter` - Select item
-- `q` - Quit/cancel current menu
+- `q` - Quit/back
+
+## Workflow
+
+1. Add frequently used configuration files through the interactive menu
+2. View your saved configs with `cofi -l` to see their assigned IDs
+3. Access any config directly using `cofi <id>`
+4. Organize configs with categories for logical grouping
+5. Add custom names for easier identification
 
 ## Configuration
-Cofi stores your favorites in `~/.config/cofi/favorites.json` and settings in `~/.config/cofi/settings.json`. These files are automatically created on first run.
 
-### Settings
-You can customize your editor preference in the settings menu or directly edit the settings file. If no custom editor is set, cofi will use your `$EDITOR` environment variable or default to `nano`.
+cofi stores its data in:
+- `~/.config/cofi/favorites.json` - Your saved configuration files
+- `~/.config/cofi/settings.json` - cofi's settings
+
+These files use a straightforward JSON format that can be edited manually if needed.
 
 ## Troubleshooting
 
 ### Command Not Found
-If you get a "command not found" error after installation, make sure:
-- The binary exists in the location you copied it to
-- The location is in your PATH
-- The binary has executable permissions (`chmod +x`)
+- Ensure cofi's location is in your PATH
+- Verify the binary has executable permissions (`chmod +x`)
 
 ### Build Errors on Linux
-If you encounter build errors related to missing C headers, make sure you have the necessary development packages installed:
-- Arch Linux: `sudo pacman -S glibc base-devel`
-- Ubuntu/Debian: `sudo apt install build-essential`
+- Install the required development packages:
+  - Arch Linux: `sudo pacman -S glibc base-devel`
+  - Ubuntu/Debian: `sudo apt install build-essential`
 
 ## Contributing
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

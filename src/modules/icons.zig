@@ -1,32 +1,29 @@
 const std = @import("std");
 
 pub const FileTypeIcons = struct {
-    pub const DEFAULT = " ";
-    pub const CONFIG = " ";
-    pub const TEXT = " ";
-    pub const CODE = " ";
+    pub const DEFAULT = " ";
+    pub const CONFIG = " ";
     pub const SHELL = " ";
-    pub const VIM = " ";
-    pub const MARKDOWN = " ";
+    pub const VIM = " ";
+    pub const MARKDOWN = " ";
     pub const JSON = " ";
-    pub const YAML = " ";
+    pub const YAML = " ";
     pub const TOML = " ";
-    pub const GIT = " ";
-    pub const HTML = " ";
-    pub const CSS = " ";
-    pub const JS = " ";
-    pub const TS = "ﯤ ";
-    pub const PYTHON = " ";
-    pub const RUST = " ";
-    pub const C = " ";
-    pub const CPP = " ";
-    pub const JAVA = " ";
-    pub const GO = " ";
-    pub const DOCKER = " ";
-    pub const LOG = " ";
-    pub const LOCK = " ";
-    pub const INI = " ";
-    pub const ENV = " ";
+    pub const GIT = " ";
+    pub const HTML = " ";
+    pub const CSS = " ";
+    pub const JS = " ";
+    pub const TS = " ";
+    pub const PYTHON = " ";
+    pub const RUST = " ";
+    pub const C = "󰙱 ";
+    pub const CPP = "󰙲 ";
+    pub const JAVA = " ";
+    pub const LUA = " ";
+    pub const GO = " ";
+    pub const OCAML = " ";
+    pub const DOCKER = "󰡨 ";
+    pub const LOG = "󱂅 ";
     pub const ZIG = " ";
 };
 
@@ -41,13 +38,13 @@ const EXTENSION_MAPPINGS = [_]ExtensionMap{
     .{ .ext = ".yaml", .icon = FileTypeIcons.YAML },
     .{ .ext = ".toml", .icon = FileTypeIcons.TOML },
     .{ .ext = ".md", .icon = FileTypeIcons.MARKDOWN },
-    .{ .ext = ".txt", .icon = FileTypeIcons.TEXT },
     .{ .ext = ".html", .icon = FileTypeIcons.HTML },
     .{ .ext = ".htm", .icon = FileTypeIcons.HTML },
     .{ .ext = ".css", .icon = FileTypeIcons.CSS },
     .{ .ext = ".js", .icon = FileTypeIcons.JS },
     .{ .ext = ".ts", .icon = FileTypeIcons.TS },
     .{ .ext = ".py", .icon = FileTypeIcons.PYTHON },
+    .{ .ext = ".lua", .icon = FileTypeIcons.LUA },
     .{ .ext = ".rs", .icon = FileTypeIcons.RUST },
     .{ .ext = ".zig", .icon = FileTypeIcons.ZIG },
     .{ .ext = ".c", .icon = FileTypeIcons.C },
@@ -62,16 +59,36 @@ const EXTENSION_MAPPINGS = [_]ExtensionMap{
     .{ .ext = ".zsh", .icon = FileTypeIcons.SHELL },
     .{ .ext = ".conf", .icon = FileTypeIcons.CONFIG },
     .{ .ext = ".config", .icon = FileTypeIcons.CONFIG },
-    .{ .ext = ".ini", .icon = FileTypeIcons.INI },
-    .{ .ext = ".env", .icon = FileTypeIcons.ENV },
     .{ .ext = ".log", .icon = FileTypeIcons.LOG },
-    .{ .ext = ".lock", .icon = FileTypeIcons.LOCK },
 };
 
-// Get the appropriate icon based ONLY on file extension
-pub fn getIconForFile(file_path: []const u8) []const u8 {
-    const ext = std.fs.path.extension(file_path);
+const FilenameMap = struct {
+    name: []const u8,
+    icon: []const u8,
+};
 
+const FILENAME_MAPPINGS = [_]FilenameMap{
+    .{ .name = ".gitconfig", .icon = FileTypeIcons.GIT },
+    .{ .name = ".gitignore", .icon = FileTypeIcons.GIT },
+    .{ .name = ".bashrc", .icon = FileTypeIcons.SHELL },
+    .{ .name = ".zshrc", .icon = FileTypeIcons.SHELL },
+    .{ .name = ".profile", .icon = FileTypeIcons.SHELL },
+    .{ .name = ".bash_profile", .icon = FileTypeIcons.SHELL },
+    .{ .name = ".vimrc", .icon = FileTypeIcons.VIM },
+    .{ .name = "init.vim", .icon = FileTypeIcons.VIM },
+    .{ .name = "Dockerfile", .icon = FileTypeIcons.DOCKER },
+};
+
+pub fn getIconForFile(file_path: []const u8) []const u8 {
+    const basename = std.fs.path.basename(file_path);
+
+    for (FILENAME_MAPPINGS) |mapping| {
+        if (std.mem.eql(u8, basename, mapping.name)) {
+            return mapping.icon;
+        }
+    }
+
+    const ext = std.fs.path.extension(basename);
     if (ext.len > 0) {
         for (EXTENSION_MAPPINGS) |mapping| {
             if (std.mem.eql(u8, ext, mapping.ext)) {
@@ -80,6 +97,5 @@ pub fn getIconForFile(file_path: []const u8) []const u8 {
         }
     }
 
-    // Default case
     return FileTypeIcons.DEFAULT;
 }

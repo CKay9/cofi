@@ -5,6 +5,7 @@ const ArrayList = std.ArrayList;
 const config = @import("config.zig");
 
 pub const Favorite = struct {
+    id: u32,
     path: []const u8,
     name: ?[]const u8 = null,
     category: ?[]const u8 = null,
@@ -68,6 +69,7 @@ pub fn loadFavorites(path: []const u8, allocator: Allocator) !ArrayList(Favorite
 
     for (parsed.value.favorites) |fav| {
         try favorites.append(Favorite{
+            .id = fav.id,
             .path = try allocator.dupe(u8, fav.path),
             .name = if (fav.name) |name| try allocator.dupe(u8, name) else null,
             .category = if (fav.category) |category| try allocator.dupe(u8, category) else null,

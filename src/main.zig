@@ -42,9 +42,9 @@ pub fn main() !void {
                 return;
             }
         } else {
-            const index_str = if (arg.len > 0 and arg[0] == '-') arg[1..] else arg;
+            const id_str = if (arg.len > 0 and arg[0] == '-') arg[1..] else arg;
 
-            const index = std.fmt.parseInt(usize, index_str, 10) catch {
+            const id = std.fmt.parseInt(u32, id_str, 10) catch {
                 const error_msg = try std.fmt.allocPrint(allocator, "Invalid argument '{s}'. Expected a number.", .{arg});
                 defer allocator.free(error_msg);
                 try help.printErrorAndHelp(stdout, error_msg);
@@ -52,14 +52,13 @@ pub fn main() !void {
                 return;
             };
 
-            try openSpecificFavorite(allocator, index);
+            try openSpecificFavorite(allocator, id);
         }
     } else {
         try core.manageFavorites(allocator);
     }
 }
 
-/// List all favorites in a simple format
 fn listFavorites(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -90,28 +89,25 @@ fn listFavorites(allocator: Allocator) !void {
 
     try stdout.print("🌽 cofi - Favorites List 🌽\n\n", .{});
 
-    for (favorites_list.items, 0..) |fav, i| {
-        const index = i + 1;
-
+    for (favorites_list.items) |fav| {
         if (fav.name) |name| {
             if (fav.category) |category| {
-                try stdout.print("{d}. {s} [{s}]\n", .{ index, name, category });
+                try stdout.print("[{d}] {s} [{s}]\n", .{ fav.id, name, category });
             } else {
-                try stdout.print("{d}. {s}\n", .{ index, name });
+                try stdout.print("[{d}] {s}\n", .{ fav.id, name });
             }
         } else {
             const basename = std.fs.path.basename(fav.path);
             if (fav.category) |category| {
-                try stdout.print("{d}. {s} [{s}]\n", .{ index, basename, category });
+                try stdout.print("[{d}] {s} [{s}]\n", .{ fav.id, basename, category });
             } else {
-                try stdout.print("{d}. {s}\n", .{ index, basename });
+                try stdout.print("[{d}] {s}\n", .{ fav.id, basename });
             }
         }
     }
 }
 
-/// Open a specific favorite by index
-fn openSpecificFavorite(allocator: Allocator, index: usize) !void {
+fn openSpecificFavorite(allocator: Allocator, id: u32) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
@@ -139,12 +135,12 @@ fn openSpecificFavorite(allocator: Allocator, index: usize) !void {
         return;
     }
 
-    if (index < 1 or index > favorites_list.items.len) {
-        try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Favorite index {d} out of range. Available range: 1-{d}", .{ index, favorites_list.items.len }));
-        return;
+    for (favorites_list.items) |fav| {
+        if (fav.id == id) {
+            try files.openWithEditor(fav.path, allocator);
+            return;
+        }
     }
 
-    const zero_based_index = index - 1;
-
-    try files.openWithEditor(favorites_list.items[zero_based_index].path, allocator);
+    try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No favorite found with ID {d}", .{id}));
 }

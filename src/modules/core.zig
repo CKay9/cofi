@@ -9,7 +9,6 @@ const config = @import("config.zig");
 const files = @import("files.zig");
 const ui = @import("ui.zig");
 
-/// Shows the settings menu and handles setting changes
 pub fn showSettingsMenu(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -35,7 +34,6 @@ pub fn showSettingsMenu(allocator: Allocator) !void {
     }
 }
 
-/// Changes the editor setting
 pub fn changeEditorSetting(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -86,7 +84,6 @@ pub fn changeEditorSetting(allocator: Allocator) !void {
     _ = try stdin.read(&key_buffer);
 }
 
-/// Changes the number of visible items in lists
 pub fn changeListVisibleItemsSetting(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -117,7 +114,7 @@ pub fn changeListVisibleItemsSetting(allocator: Allocator) !void {
         ui.LIST_VISIBLE_ITEMS = new_count;
     } else {
         settings.list_visible_items = null; // Reset to default
-        ui.LIST_VISIBLE_ITEMS = config.DEFAULT_LIST_VISIBLE_ITEMS; // Reset to default value
+        ui.LIST_VISIBLE_ITEMS = config.DEFAULT_LIST_VISIBLE_ITEMS;
     }
 
     try config.saveSettings(allocator, settings);
@@ -127,7 +124,6 @@ pub fn changeListVisibleItemsSetting(allocator: Allocator) !void {
     _ = try stdin.read(&key_buffer);
 }
 
-/// Changes the sort settings
 pub fn changeSortSettings(allocator: Allocator, field: config.SortField) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -154,7 +150,6 @@ pub fn changeSortSettings(allocator: Allocator, field: config.SortField) !void {
     _ = try stdin.read(&key_buffer);
 }
 
-/// Manages color settings for categories
 pub fn manageCategoryColors(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -249,7 +244,6 @@ pub fn manageCategoryColors(allocator: Allocator) !void {
     }
 }
 
-/// Removes a favorite from the list
 pub fn removeFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -272,15 +266,15 @@ pub fn removeFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path
 
         if (fav.name) |name| {
             if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}] - {s}", .{ name, category, fav.path });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}] - {s}", .{ fav.id, name, category, fav.path });
             } else {
-                display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} - {s}", .{ fav.id, name, fav.path });
             }
         } else {
             if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}]", .{ fav.path, category });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}]", .{ fav.id, fav.path, category });
             } else {
-                display = try allocator.dupe(u8, fav.path);
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s}", .{ fav.id, fav.path });
             }
         }
 
@@ -309,7 +303,6 @@ pub fn removeFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path
     }
 }
 
-/// Adds a new favorite
 pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -362,7 +355,16 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
     var category_buffer: [256]u8 = undefined;
     const category_input = (try stdin.readUntilDelimiterOrEof(&category_buffer, '\n')) orelse "";
 
+    // Calculate the next ID by finding the highest existing ID and adding 1
+    var next_id: u32 = 1;
+    for (favorites_list.items) |fav| {
+        if (fav.id >= next_id) {
+            next_id = fav.id + 1;
+        }
+    }
+
     const favorite = files.Favorite{
+        .id = next_id, // Assign the next available ID
         .path = try allocator.dupe(u8, expanded_path),
         .name = if (name_input.len > 0) try allocator.dupe(u8, name_input) else null,
         .category = if (category_input.len > 0) try allocator.dupe(u8, category_input) else null,
@@ -370,13 +372,12 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
 
     try favorites_list.append(favorite);
     try files.saveFavorites(favorites_path, favorites_list.*, allocator);
-    try stdout.print("\nFavorite added: {s}\n", .{expanded_path});
+    try stdout.print("\nFavorite added: {s} (ID: {d})\n", .{ expanded_path, next_id });
     try stdout.print("Press any key to continue...", .{});
     var key_buffer: [1]u8 = undefined;
     _ = try stdin.read(&key_buffer);
 }
 
-/// Shows all favorites and allows the user to select one
 pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -404,15 +405,15 @@ pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: A
 
         if (fav.name) |name| {
             if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}] - {s}", .{ name, category, fav.path });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}] - {s}", .{ fav.id, name, category, fav.path });
             } else {
-                display = try std.fmt.allocPrint(allocator, "{s} - {s}", .{ name, fav.path });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} - {s}", .{ fav.id, name, fav.path });
             }
         } else {
             if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "{s} [{s}]", .{ fav.path, category });
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}]", .{ fav.id, fav.path, category });
             } else {
-                display = try allocator.dupe(u8, fav.path);
+                display = try std.fmt.allocPrint(allocator, "[{d}] {s}", .{ fav.id, fav.path });
             }
         }
 
@@ -426,7 +427,6 @@ pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: A
     }
 }
 
-/// Show categories menu and allow filtering by category
 pub fn showCategoriesMenu(favorites_list: *ArrayList(files.Favorite), allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -451,7 +451,6 @@ pub fn showCategoriesMenu(favorites_list: *ArrayList(files.Favorite), allocator:
     }
 }
 
-/// Show favorites filtered by category
 fn showFilteredFavorites(favorites_list: *ArrayList(files.Favorite), category: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -504,7 +503,6 @@ fn showFilteredFavorites(favorites_list: *ArrayList(files.Favorite), category: [
     }
 }
 
-/// Show all favorites with category filtering
 pub fn showFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -620,7 +618,6 @@ pub fn showFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allo
     }
 }
 
-/// The main function to manage favorites
 pub fn manageFavorites(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();

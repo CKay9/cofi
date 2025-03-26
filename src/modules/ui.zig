@@ -342,7 +342,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
 
         if (i < end_idx - 1) {
             const dash = "─";
-            const separator_width = TERMINAL_WIDTH - 14;
+            const separator_width = TERMINAL_WIDTH - 12;
 
             try writer.print("  {s}", .{ANSI_GRAY});
 
@@ -381,6 +381,9 @@ fn calculateVisibleRange(total_items: usize, current_selection: usize, visible_i
 }
 
 fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: config.Settings, is_deletion_menu: bool, allocator: Allocator) !void {
+    const MAX_LINE_WIDTH: usize = 50;
+    const ICON_POS: usize = 6;
+
     var path_buffer: [1024]u8 = undefined;
     var parts = files.splitPathAndName(item);
     const display_path = if (home_dir.len > 0 and std.mem.startsWith(u8, parts.path, home_dir))
@@ -416,11 +419,25 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
         }
     }
 
-    // Get the icon for this file
     const icon = icons.getIconForFile(parts.path);
 
-    // Log to debug file
-    debug.log("Rendering item - Path: {s}, Icon: {s}", .{ parts.path, icon });
+    var cat_format: []const u8 = "";
+    var cat_buffer: [256]u8 = undefined;
+
+    if (category) |cat| {
+        cat_format = std.fmt.bufPrint(&cat_buffer, "[{s}]", .{cat}) catch "";
+    }
+
+    const cat_len = cat_format.len;
+
+    var truncated_name = clean_name;
+    var name_buffer: [256]u8 = undefined;
+
+    const max_name_len = MAX_LINE_WIDTH - ICON_POS - 3 - cat_len - 2;
+
+    if (clean_name.len > max_name_len) {
+        truncated_name = std.fmt.bufPrint(&name_buffer, "{s}...", .{clean_name[0 .. max_name_len - 3]}) catch clean_name;
+    }
 
     if (index == current_selection) {
         const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
@@ -432,25 +449,63 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
             defer if (category_color) |color| allocator.free(color);
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
 
-            const cat_fmt = std.fmt.allocPrint(allocator, "[{s}]", .{cat}) catch "";
-            defer if (cat_fmt.len > 0) allocator.free(cat_fmt);
+            var id_str_buffer: [10]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buffer, "[{d}]", .{id}) catch "[?]";
 
-            const line_width = TERMINAL_WIDTH - 10;
-            const prefix_len = 2 + 5 + clean_name.len;
-            const spaces_needed = line_width - prefix_len - cat_fmt.len;
+            const id_padding = if (id_str.len < 5) 5 - id_str.len else 0;
+            const total_before_icon = 2 + id_str.len + id_padding;
+            const icon_padding = if (ICON_POS > total_before_icon) ICON_POS - total_before_icon else 0;
 
-            try writer.print("{s}{s}[{d}] {s}{s}", .{ highlight_color, ANSI_INVERT_ON, id, icon, clean_name });
+            try writer.print("{s}{s}{s}", .{ highlight_color, ANSI_INVERT_ON, id_str });
 
-            for (0..spaces_needed) |_| {
+            for (0..id_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            for (0..icon_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            try writer.print("{s} ", .{icon});
+
+            const padding_for_cat = MAX_LINE_WIDTH - (ICON_POS + 1 + truncated_name.len + cat_format.len - 5);
+
+            try writer.print("{s}", .{truncated_name});
+
+            for (0..padding_for_cat) |_| {
                 try writer.print(" ", .{});
             }
 
             try writer.print("{s}[{s}]{s}{s}\n", .{ color_code, cat, highlight_color, ANSI_INVERT_OFF });
         } else {
-            try writer.print("{s}{s}[{d}] {s}{s}{s}{s}\n", .{ highlight_color, ANSI_INVERT_ON, id, icon, clean_name, ANSI_INVERT_OFF, ANSI_FILL_LINE });
+            var id_str_buffer: [10]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buffer, "[{d}]", .{id}) catch "[?]";
+
+            const id_padding = if (id_str.len < 5) 5 - id_str.len else 0;
+            const total_before_icon = 2 + id_str.len + id_padding;
+            const icon_padding = if (ICON_POS > total_before_icon) ICON_POS - total_before_icon else 0;
+
+            try writer.print("{s}{s}{s}", .{ highlight_color, ANSI_INVERT_ON, id_str });
+
+            for (0..id_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            for (0..icon_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            try writer.print("{s} {s}{s}{s}\n", .{ icon, truncated_name, ANSI_INVERT_OFF, ANSI_FILL_LINE });
         }
 
-        try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, display_path, ANSI_RESET });
+        var truncated_path = display_path;
+        var path_display_buffer: [256]u8 = undefined;
+
+        if (display_path.len > MAX_LINE_WIDTH - 8) {
+            truncated_path = std.fmt.bufPrint(&path_display_buffer, "...{s}", .{display_path[display_path.len - (MAX_LINE_WIDTH - 11) .. display_path.len]}) catch display_path;
+        }
+
+        try writer.print("    {s}╰─{s}{s}\n", .{ highlight_color, truncated_path, ANSI_RESET });
     } else {
         try writer.print("  ", .{});
 
@@ -459,25 +514,63 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
             defer if (category_color) |color| allocator.free(color);
             const color_code = if (category_color) |color| getAnsiColorFromName(color) else ANSI_LIGHT_GRAY;
 
-            const cat_fmt = std.fmt.allocPrint(allocator, "[{s}]", .{cat}) catch "";
-            defer if (cat_fmt.len > 0) allocator.free(cat_fmt);
+            var id_str_buffer: [10]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buffer, "[{d}]", .{id}) catch "[?]";
 
-            const line_width = TERMINAL_WIDTH - 10;
-            const prefix_len = 2 + 5 + clean_name.len;
-            const spaces_needed = line_width - prefix_len - cat_fmt.len;
+            const id_padding = if (id_str.len < 5) 5 - id_str.len else 0;
+            const total_before_icon = 2 + id_str.len + id_padding;
+            const icon_padding = if (ICON_POS > total_before_icon) ICON_POS - total_before_icon else 0;
 
-            try writer.print("{s}[{d}]{s} {s}{s}", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, icon, clean_name });
+            try writer.print("{s}{s}{s}", .{ ANSI_MEDIUM_GRAY, id_str, ANSI_RESET });
 
-            for (0..spaces_needed) |_| {
+            for (0..id_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            for (0..icon_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            try writer.print("{s} ", .{icon});
+
+            const padding_for_cat = MAX_LINE_WIDTH - (ICON_POS + 1 + truncated_name.len + cat_format.len - 5);
+
+            try writer.print("{s}", .{truncated_name});
+
+            for (0..padding_for_cat) |_| {
                 try writer.print(" ", .{});
             }
 
             try writer.print("{s}[{s}]{s}\n", .{ color_code, cat, ANSI_RESET });
         } else {
-            try writer.print("{s}[{d}]{s} {s}{s}\n", .{ ANSI_MEDIUM_GRAY, id, ANSI_RESET, icon, clean_name });
+            var id_str_buffer: [10]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buffer, "[{d}]", .{id}) catch "[?]";
+
+            const id_padding = if (id_str.len < 5) 5 - id_str.len else 0;
+            const total_before_icon = 2 + id_str.len + id_padding;
+            const icon_padding = if (ICON_POS > total_before_icon) ICON_POS - total_before_icon else 0;
+
+            try writer.print("{s}{s}{s}", .{ ANSI_MEDIUM_GRAY, id_str, ANSI_RESET });
+
+            for (0..id_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            for (0..icon_padding) |_| {
+                try writer.print(" ", .{});
+            }
+
+            try writer.print("{s} {s}\n", .{ icon, truncated_name });
         }
 
-        try writer.print("     {s}~{s}{s}\n", .{ ANSI_LIGHT_GRAY, display_path, ANSI_RESET });
+        var truncated_path = display_path;
+        var path_display_buffer: [256]u8 = undefined;
+
+        if (display_path.len > MAX_LINE_WIDTH - 8) {
+            truncated_path = std.fmt.bufPrint(&path_display_buffer, "...{s}", .{display_path[display_path.len - (MAX_LINE_WIDTH - 11) .. display_path.len]}) catch display_path;
+        }
+
+        try writer.print("     {s}~{s}{s}\n", .{ ANSI_LIGHT_GRAY, truncated_path, ANSI_RESET });
     }
 }
 

@@ -74,7 +74,7 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     }
 }
 
-pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?usize {
+pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?isize {
     if (items.len == 0) {
         try stdout.print("No items available in list: {s}\n", .{title});
         return null;
@@ -97,8 +97,9 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
                 'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
                 'g' => current_selection = 0,
                 'G' => current_selection = items.len - 1,
-                '\r', '\n' => return current_selection,
+                '\r', '\n' => return @intCast(current_selection),
                 'q' => return null,
+                'm' => return -1,
                 else => {},
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
@@ -591,8 +592,7 @@ fn renderListFooter(writer: std.ArrayList(u8).Writer, current_selection: usize, 
     for (0..BORDER_WIDTH - 2) |_| try writer.print("─", .{});
     try writer.print("╮\n", .{});
 
-    try writer.print("│      {s}[j]{s} Down | {s}[k]{s} Up | {s}[Enter]{s} Select | {s}[q]{s} Back      │\n", .{
-        ANSI_BOLD_YELLOW, ANSI_RESET,
+    try writer.print("│             {s}[m]{s} Menu | {s}[d]{s} Delete | {s}[q]{s} Quit            │\n", .{
         ANSI_BOLD_YELLOW, ANSI_RESET,
         ANSI_BOLD_YELLOW, ANSI_RESET,
         ANSI_BOLD_YELLOW, ANSI_RESET,

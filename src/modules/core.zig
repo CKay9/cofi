@@ -218,7 +218,7 @@ pub fn manageCategoryColors(allocator: Allocator) !void {
     const category_selection = try ui.selectFromList(stdout, stdin, "Select a category to change its color", display_items.items, false);
 
     if (category_selection) |idx| {
-        const selected_category = categories.items[idx];
+        const selected_category = categories.items[@intCast(idx)];
 
         const title = try std.fmt.allocPrint(allocator, "Select color for '{s}'", .{selected_category});
         defer allocator.free(title);
@@ -284,17 +284,17 @@ pub fn removeFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path
     const selection = try ui.selectFromList(stdout, stdin, "Remove Files", display_items.items, true);
 
     if (selection) |idx| {
-        try stdout.print("Remove {s}? (y/n): ", .{display_items.items[idx]});
+        try stdout.print("Remove {s}? (y/n): ", .{display_items.items[@intCast(idx)]});
 
         var confirm_buffer: [10]u8 = undefined;
         const confirm = (try stdin.readUntilDelimiterOrEof(&confirm_buffer, '\n')) orelse "";
 
         if (confirm.len > 0 and (confirm[0] == 'y' or confirm[0] == 'Y')) {
-            if (favorites_list.items[idx].name) |name| allocator.free(name);
-            if (favorites_list.items[idx].category) |category| allocator.free(category);
-            allocator.free(favorites_list.items[idx].path);
+            if (favorites_list.items[@intCast(idx)].name) |name| allocator.free(name);
+            if (favorites_list.items[@intCast(idx)].category) |category| allocator.free(category);
+            allocator.free(favorites_list.items[@intCast(idx)].path);
 
-            _ = favorites_list.orderedRemove(idx);
+            _ = favorites_list.orderedRemove(@intCast(idx));
             try files.saveFavorites(favorites_path, favorites_list.*, allocator);
             try stdout.print("Favorite removed\n", .{});
         } else {
@@ -355,7 +355,6 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
     var category_buffer: [256]u8 = undefined;
     const category_input = (try stdin.readUntilDelimiterOrEof(&category_buffer, '\n')) orelse "";
 
-    // Calculate the next ID by finding the highest existing ID and adding 1
     var next_id: u32 = 1;
     for (favorites_list.items) |fav| {
         if (fav.id >= next_id) {
@@ -423,7 +422,7 @@ pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: A
     const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files", display_items.items, false);
 
     if (favorite_selection) |idx| {
-        try files.openWithEditor(favorites_list.items[idx].path, allocator);
+        try files.openWithEditor(favorites_list.items[@intCast(idx)].path, allocator);
     }
 }
 
@@ -498,7 +497,7 @@ fn showFilteredFavorites(favorites_list: *ArrayList(files.Favorite), category: [
     const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items, false);
 
     if (favorite_selection) |idx| {
-        const original_idx = display_to_favorite.items[idx];
+        const original_idx = display_to_favorite.items[@intCast(idx)];
         try files.openWithEditor(favorites_list.items[original_idx].path, allocator);
     }
 }
@@ -618,13 +617,13 @@ pub fn showFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allo
     }
 }
 
-pub fn manageFavorites(allocator: Allocator) !void {
+pub fn manageFavorites(allocator: Allocator) !bool {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
 
     const paths = config.getConfigPaths(allocator) catch |err| {
         try stdout.print("Error setting up config directory: {any}\n", .{err});
-        return;
+        return false;
     };
     defer {
         allocator.free(paths.config_dir);
@@ -651,16 +650,19 @@ pub fn manageFavorites(allocator: Allocator) !void {
 
         if (selection) |idx| {
             switch (idx) {
-                0 => try showAllFavorites(&favorites_list, allocator),
+                0 => {
+                    try showAllFavorites(&favorites_list, allocator);
+                    return true; // Return to file list view
+                },
                 1 => try addFavorite(&favorites_list, paths.favorites_path, allocator),
                 2 => try removeFavorite(&favorites_list, paths.favorites_path, allocator),
                 3 => try showCategoriesMenu(&favorites_list, allocator),
                 4 => try showSettingsMenu(allocator),
-                5 => return,
+                5 => return false, // Exit program
                 else => {},
             }
         } else {
-            return;
+            return true;
         }
     }
 }

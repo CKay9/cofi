@@ -16,14 +16,11 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    // Initialize debug logger
     try debug.init();
     defer debug.deinit();
 
-    // Test icons display - log to file
     debug.log("=== Icon Display Test ===", .{});
 
-    // Test with common file types
     const test_files = [_][]const u8{
         "/home/user/config.json",
         "/home/user/script.py",
@@ -79,7 +76,100 @@ pub fn main() !void {
             try openSpecificFavorite(allocator, id);
         }
     } else {
-        try core.manageFavorites(allocator);
+        try manageFilesAndMenu(allocator);
+    }
+}
+
+fn manageFilesAndMenu(allocator: Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    const paths = try config.getConfigPaths(allocator);
+    defer {
+        allocator.free(paths.config_dir);
+        allocator.free(paths.favorites_path);
+        allocator.free(paths.settings_path);
+    }
+
+    try files.initializeFavoritesFile(paths.favorites_path, allocator);
+
+    var view_mode: enum { files, menu } = .files;
+
+    while (true) {
+        var favorites_list = try files.loadFavorites(paths.favorites_path, allocator);
+        defer {
+            for (favorites_list.items) |item| {
+                if (item.name) |name| allocator.free(name);
+                if (item.category) |category| allocator.free(category);
+                allocator.free(item.path);
+            }
+            favorites_list.deinit();
+        }
+
+        switch (view_mode) {
+            .files => {
+                if (favorites_list.items.len == 0) {
+                    try files.handleError(stdout, stdin, "No files available. Use the menu to add files.");
+                    view_mode = .menu;
+                    continue;
+                }
+
+                var settings = try config.loadSettings(allocator);
+                defer settings.deinit(allocator);
+
+                files.sortFavoritesList(&favorites_list, settings);
+
+                var display_items = ArrayList([]u8).init(allocator);
+                defer {
+                    for (display_items.items) |item| {
+                        allocator.free(item);
+                    }
+                    display_items.deinit();
+                }
+
+                for (favorites_list.items) |fav| {
+                    var display: []u8 = undefined;
+
+                    if (fav.name) |name| {
+                        if (fav.category) |category| {
+                            display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}] - {s}", .{ fav.id, name, category, fav.path });
+                        } else {
+                            display = try std.fmt.allocPrint(allocator, "[{d}] {s} - {s}", .{ fav.id, name, fav.path });
+                        }
+                    } else {
+                        if (fav.category) |category| {
+                            display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}]", .{ fav.id, fav.path, category });
+                        } else {
+                            display = try std.fmt.allocPrint(allocator, "[{d}] {s}", .{ fav.id, fav.path });
+                        }
+                    }
+
+                    try display_items.append(display);
+                }
+
+                const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files (press 'm' for menu)", display_items.items, false);
+
+                if (favorite_selection) |idx| {
+                    if (idx < 0) {
+                        view_mode = .menu;
+                        continue;
+                    }
+
+                    // Otherwise open the selected file
+                    try files.openWithEditor(favorites_list.items[@intCast(idx)].path, allocator);
+                } else {
+                    return;
+                }
+            },
+            .menu => {
+                const menu_result = try core.manageFavorites(allocator);
+                if (menu_result) {
+                    view_mode = .files;
+                } else {
+                    return;
+                }
+            },
+        }
     }
 }
 

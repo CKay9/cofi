@@ -16,6 +16,7 @@ pub const FileTypeIcons = struct {
     pub const TS = " ";
     pub const PYTHON = " ";
     pub const RUST = " ";
+    pub const FISH = " ";
     pub const C = "󰙱 ";
     pub const CPP = "󰙲 ";
     pub const JAVA = " ";
@@ -57,6 +58,7 @@ const EXTENSION_MAPPINGS = [_]ExtensionMap{
     .{ .ext = ".sh", .icon = FileTypeIcons.SHELL },
     .{ .ext = ".bash", .icon = FileTypeIcons.SHELL },
     .{ .ext = ".zsh", .icon = FileTypeIcons.SHELL },
+    .{ .ext = ".fish", .icon = FileTypeIcons.FISH },
     .{ .ext = ".conf", .icon = FileTypeIcons.CONFIG },
     .{ .ext = ".config", .icon = FileTypeIcons.CONFIG },
     .{ .ext = ".log", .icon = FileTypeIcons.LOG },

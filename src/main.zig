@@ -203,7 +203,7 @@ fn manageFilesAndMenu(allocator: Allocator) !void {
                     try display_items.append(display);
                 }
 
-                const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files (press 'm' for menu)", display_items.items, false);
+                const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files (press 'm' for menu)", display_items.items);
 
                 if (favorite_selection) |idx| {
                     if (idx == -1) {

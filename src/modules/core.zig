@@ -101,12 +101,12 @@ pub fn changeListVisibleItemsSetting(allocator: Allocator) !void {
 
     if (input.len > 0) {
         const new_count = std.fmt.parseInt(u8, input, 10) catch |err| {
-            try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Invalid input: {}", .{err}));
+            try config.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Invalid input: {}", .{err}));
             return;
         };
 
         if (new_count < 3 or new_count > 15) {
-            try files.handleError(stdout, stdin, "Value must be between 3 and 15.");
+            try config.handleError(stdout, stdin, "Value must be between 3 and 15.");
             return;
         }
 
@@ -183,7 +183,7 @@ pub fn manageCategoryColors(allocator: Allocator) !void {
     }
 
     if (categories.items.len == 0) {
-        try files.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
+        try config.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
         return;
     }
 
@@ -215,7 +215,7 @@ pub fn manageCategoryColors(allocator: Allocator) !void {
         try display_items.append(display);
     }
 
-    const category_selection = try ui.selectFromList(stdout, stdin, "Select a category to change its color", display_items.items, false);
+    const category_selection = try ui.selectFromList(stdout, stdin, "Select a category to change its color", display_items.items);
 
     if (category_selection) |idx| {
         const selected_category = categories.items[@intCast(idx)];
@@ -244,65 +244,6 @@ pub fn manageCategoryColors(allocator: Allocator) !void {
     }
 }
 
-pub fn removeFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: []const u8, allocator: Allocator) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stdin = std.io.getStdIn().reader();
-
-    if (favorites_list.items.len == 0) {
-        try stdout.print("No files available to remove\n", .{});
-        return;
-    }
-
-    var display_items = ArrayList([]u8).init(allocator);
-    defer {
-        for (display_items.items) |item| {
-            allocator.free(item);
-        }
-        display_items.deinit();
-    }
-
-    for (favorites_list.items) |fav| {
-        var display: []u8 = undefined;
-
-        if (fav.name) |name| {
-            if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}] - {s}", .{ fav.id, name, category, fav.path });
-            } else {
-                display = try std.fmt.allocPrint(allocator, "[{d}] {s} - {s}", .{ fav.id, name, fav.path });
-            }
-        } else {
-            if (fav.category) |category| {
-                display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}]", .{ fav.id, fav.path, category });
-            } else {
-                display = try std.fmt.allocPrint(allocator, "[{d}] {s}", .{ fav.id, fav.path });
-            }
-        }
-
-        try display_items.append(display);
-    }
-
-    const selection = try ui.selectFromList(stdout, stdin, "Remove Files", display_items.items, true);
-
-    if (selection) |idx| {
-        try stdout.print("Remove {s}? (y/n): ", .{display_items.items[@intCast(idx)]});
-
-        var confirm_buffer: [10]u8 = undefined;
-        const confirm = (try stdin.readUntilDelimiterOrEof(&confirm_buffer, '\n')) orelse "";
-
-        if (confirm.len > 0 and (confirm[0] == 'y' or confirm[0] == 'Y')) {
-            if (favorites_list.items[@intCast(idx)].name) |name| allocator.free(name);
-            if (favorites_list.items[@intCast(idx)].category) |category| allocator.free(category);
-            allocator.free(favorites_list.items[@intCast(idx)].path);
-
-            _ = favorites_list.orderedRemove(@intCast(idx));
-            try files.saveFavorites(favorites_path, favorites_list.*, allocator);
-            try stdout.print("Favorite removed\n", .{});
-        } else {
-            try stdout.print("Removal cancelled\n", .{});
-        }
-    }
-}
-
 pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: []const u8, allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -312,13 +253,13 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
     const input_path = (try stdin.readUntilDelimiterOrEof(&path_buffer, '\n')) orelse return;
 
     const expanded_path = config.expandTildePath(input_path, allocator) catch |err| {
-        try files.handleErrorFmt(stdout, stdin, allocator, "Invalid path format '{s}': {}", .{ input_path, err });
+        try config.handleErrorFmt(stdout, stdin, allocator, "Invalid path format '{s}': {}", .{ input_path, err });
         return;
     };
     defer allocator.free(expanded_path);
 
     if (!fs.path.isAbsolute(expanded_path)) {
-        try files.handleErrorFmt(stdout, stdin, allocator, "Path must be absolute (start with '/' or '~/'). You entered: '{s}'", .{input_path});
+        try config.handleErrorFmt(stdout, stdin, allocator, "Path must be absolute (start with '/' or '~/'). You entered: '{s}'", .{input_path});
         return;
     }
 
@@ -327,7 +268,7 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
             if (err == error.FileNotFound) {
                 break :blk false;
             } else {
-                try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Error accessing file: {}", .{err}));
+                try config.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "Error accessing file: {}", .{err}));
                 return;
             }
         };
@@ -336,13 +277,13 @@ pub fn addFavorite(favorites_list: *ArrayList(files.Favorite), favorites_path: [
     };
 
     if (!file_exists) {
-        try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "File '{s}' does not exist", .{expanded_path}));
+        try config.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "File '{s}' does not exist", .{expanded_path}));
         return;
     }
 
     for (favorites_list.items) |fav| {
         if (std.mem.eql(u8, fav.path, expanded_path)) {
-            try files.handleError(stdout, stdin, "File is already in favorites.");
+            try config.handleError(stdout, stdin, "File is already in favorites.");
             return;
         }
     }
@@ -382,7 +323,7 @@ pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: A
     const stdin = std.io.getStdIn().reader();
 
     if (favorites_list.items.len == 0) {
-        try files.handleError(stdout, stdin, "No files available");
+        try config.handleError(stdout, stdin, "No files available");
         return;
     }
 
@@ -419,7 +360,7 @@ pub fn showAllFavorites(favorites_list: *ArrayList(files.Favorite), allocator: A
         try display_items.append(display);
     }
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files", display_items.items, false);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files", display_items.items);
 
     if (favorite_selection) |idx| {
         try files.openWithEditor(favorites_list.items[@intCast(idx)].path, allocator);
@@ -439,7 +380,7 @@ pub fn showCategoriesMenu(favorites_list: *ArrayList(files.Favorite), allocator:
     }
 
     if (categories.items.len == 0) {
-        try files.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
+        try config.handleError(stdout, stdin, "No categories available. Add some files with categories first.");
         return;
     }
 
@@ -487,14 +428,14 @@ fn showFilteredFavorites(favorites_list: *ArrayList(files.Favorite), category: [
     }
 
     if (display_items.items.len == 0) {
-        try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{category}));
+        try config.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{category}));
         return;
     }
 
     const list_title = try std.fmt.allocPrint(allocator, "Category: {s}", .{category});
     defer allocator.free(list_title);
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items, false);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
 
     if (favorite_selection) |idx| {
         const original_idx = display_to_favorite.items[@intCast(idx)];
@@ -507,7 +448,7 @@ pub fn showFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allo
     const stdin = std.io.getStdIn().reader();
 
     if (favorites_list.items.len == 0) {
-        try files.handleError(stdout, stdin, "No files available");
+        try config.handleError(stdout, stdin, "No files available");
         return;
     }
 
@@ -602,14 +543,14 @@ pub fn showFavorites(favorites_list: *ArrayList(files.Favorite), allocator: Allo
     }
 
     if (display_items.items.len == 0) {
-        try files.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{selected_category}));
+        try config.handleError(stdout, stdin, try std.fmt.allocPrint(allocator, "No files match the selected category: {s}", .{selected_category}));
         return;
     }
 
     const list_title = try std.fmt.allocPrint(allocator, "Files - {s}", .{selected_category});
     defer allocator.free(list_title);
 
-    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items, false);
+    const favorite_selection = try ui.selectFromList(stdout, stdin, list_title, display_items.items);
 
     if (favorite_selection) |idx| {
         const original_idx = display_to_favorite.items[idx];

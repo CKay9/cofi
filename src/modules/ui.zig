@@ -75,7 +75,7 @@ pub fn selectFromMenu(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     }
 }
 
-pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8, is_deletion_menu: bool) !?isize {
+pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, title: []const u8, items: []const []u8) !?isize {
     if (items.len == 0) {
         try stdout.print("No items available in list: {s}\n", .{title});
         return null;
@@ -88,7 +88,7 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
     defer terminal.disableRawMode();
 
     while (true) {
-        try renderList(stdout, title, items, current_list_selection, is_deletion_menu);
+        try renderList(stdout, title, items, current_list_selection);
 
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
@@ -325,7 +325,7 @@ pub fn renderColorMenu(stdout: std.fs.File.Writer, title: []const u8, color_name
     try renderBorder(stdout, false, true);
 }
 
-pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize, is_deletion_menu: bool) !void {
+pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const []u8, current_selection: usize) !void {
     output_buffer.clearRetainingCapacity();
     var writer = output_buffer.writer();
 
@@ -343,7 +343,7 @@ pub fn renderList(stdout: std.fs.File.Writer, title: []const u8, items: []const 
     const end_idx = visible_range.end;
 
     for (start_idx..end_idx) |i| {
-        try renderListItem(writer, items[i], i, current_selection, home_dir, settings, is_deletion_menu, allocator);
+        try renderListItem(writer, items[i], i, current_selection, home_dir, settings, allocator);
 
         if (i < end_idx - 1) {
             const dash = "─";
@@ -385,7 +385,7 @@ fn calculateVisibleRange(total_items: usize, current_selection: usize, visible_i
     return .{ .start = start_idx, .end = end_idx };
 }
 
-fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: config.Settings, is_deletion_menu: bool, allocator: Allocator) !void {
+fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usize, current_selection: usize, home_dir: []const u8, settings: config.Settings, allocator: Allocator) !void {
     const MAX_LINE_WIDTH: usize = 50;
     const ICON_POS: usize = 6;
 
@@ -445,7 +445,7 @@ fn renderListItem(writer: std.ArrayList(u8).Writer, item: []const u8, index: usi
     }
 
     if (index == current_selection) {
-        const highlight_color = if (is_deletion_menu) ANSI_RED else ANSI_CYAN;
+        const highlight_color = ANSI_CYAN;
 
         try writer.print("  ", .{});
 

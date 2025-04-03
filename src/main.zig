@@ -8,6 +8,7 @@ const help = @import("modules/help.zig");
 const ui = @import("modules/ui.zig");
 const icons = @import("modules/icons.zig");
 const debug = @import("modules/debug.zig");
+const terminal = @import("modules/terminal.zig");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -80,6 +81,61 @@ pub fn main() !void {
     }
 }
 
+fn directDeleteSelected(favorites_list: *ArrayList(files.Favorite), favorites_path: []const u8, selected_index: usize, allocator: Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    if (favorites_list.items.len == 0 or selected_index >= favorites_list.items.len) {
+        return;
+    }
+
+    // Temporarily disable raw mode for the confirmation prompt
+    terminal.disableRawMode();
+
+    const fav = favorites_list.items[selected_index];
+
+    // Create display string for the selected item
+    var display: []u8 = undefined;
+    if (fav.name) |name| {
+        if (fav.category) |category| {
+            display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}] - {s}", .{ fav.id, name, category, fav.path });
+        } else {
+            display = try std.fmt.allocPrint(allocator, "[{d}] {s} - {s}", .{ fav.id, name, fav.path });
+        }
+    } else {
+        if (fav.category) |category| {
+            display = try std.fmt.allocPrint(allocator, "[{d}] {s} [{s}]", .{ fav.id, fav.path, category });
+        } else {
+            display = try std.fmt.allocPrint(allocator, "[{d}] {s}", .{ fav.id, fav.path });
+        }
+    }
+    defer allocator.free(display);
+
+    try stdout.print("\nRemove {s}? (y/n): ", .{display});
+
+    var confirm_buffer: [10]u8 = undefined;
+    const confirm = (try stdin.readUntilDelimiterOrEof(&confirm_buffer, '\n')) orelse "";
+
+    if (confirm.len > 0 and (confirm[0] == 'y' or confirm[0] == 'Y')) {
+        if (fav.name) |name| allocator.free(name);
+        if (fav.category) |category| allocator.free(category);
+        allocator.free(fav.path);
+
+        _ = favorites_list.orderedRemove(selected_index);
+        try files.saveFavorites(favorites_path, favorites_list.*, allocator);
+        try stdout.print("Favorite removed\n", .{});
+    } else {
+        try stdout.print("Removal cancelled\n", .{});
+    }
+
+    try stdout.print("Press any key to continue...", .{});
+    var key_buffer: [1]u8 = undefined;
+    _ = try stdin.read(&key_buffer);
+
+    // Re-enable raw mode
+    try terminal.enableRawMode();
+}
+
 fn manageFilesAndMenu(allocator: Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
@@ -150,8 +206,16 @@ fn manageFilesAndMenu(allocator: Allocator) !void {
                 const favorite_selection = try ui.selectFromList(stdout, stdin, "Your files (press 'm' for menu)", display_items.items, false);
 
                 if (favorite_selection) |idx| {
-                    if (idx < 0) {
+                    if (idx == -1) {
                         view_mode = .menu;
+                        continue;
+                    } else if (idx == -2) {
+                        // Handle 'a' key (add file)
+                        try core.addFavorite(&favorites_list, paths.favorites_path, allocator);
+                        continue;
+                    } else if (idx == -3) {
+                        // Handle 'd' key (direct delete of the currently selected item)
+                        try directDeleteSelected(&favorites_list, paths.favorites_path, ui.current_list_selection, allocator);
                         continue;
                     }
 

@@ -643,7 +643,7 @@ pub fn manageFavorites(allocator: Allocator) !bool {
         favorites_list.deinit();
     }
 
-    const menu_items = [_][]const u8{ "Show all files", "Add file", "Remove file", "Categories", "Settings", "Exit" };
+    const menu_items = [_][]const u8{ "Show all files", "Categories", "Settings", "Exit" };
 
     while (true) {
         const selection = try ui.selectFromMenu(stdout, stdin, "cofi - Config File Manager", &menu_items);
@@ -654,11 +654,9 @@ pub fn manageFavorites(allocator: Allocator) !bool {
                     try showAllFavorites(&favorites_list, allocator);
                     return true; // Return to file list view
                 },
-                1 => try addFavorite(&favorites_list, paths.favorites_path, allocator),
-                2 => try removeFavorite(&favorites_list, paths.favorites_path, allocator),
-                3 => try showCategoriesMenu(&favorites_list, allocator),
-                4 => try showSettingsMenu(allocator),
-                5 => return false, // Exit program
+                1 => try showCategoriesMenu(&favorites_list, allocator),
+                2 => try showSettingsMenu(allocator),
+                3 => return false, // Exit program
                 else => {},
             }
         } else {

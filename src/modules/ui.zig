@@ -30,6 +30,7 @@ pub const ANSI_RESET = "\x1b[0m";
 pub const ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H";
 
 pub var LIST_VISIBLE_ITEMS: u8 = config.DEFAULT_LIST_VISIBLE_ITEMS;
+pub var current_list_selection: usize = 0;
 
 pub const AVAILABLE_COLORS = [_]struct { name: []const u8, ansi: []const u8 }{
     .{ .name = "Default", .ansi = ANSI_RESET },
@@ -80,32 +81,35 @@ pub fn selectFromList(stdout: std.fs.File.Writer, stdin: std.fs.File.Reader, tit
         return null;
     }
 
-    var current_selection: usize = 0;
+    // Initialize selection (or keep it within bounds if already set)
+    current_list_selection = @min(current_list_selection, items.len - 1);
 
     try terminal.enableRawMode();
     defer terminal.disableRawMode();
 
     while (true) {
-        try renderList(stdout, title, items, current_selection, is_deletion_menu);
+        try renderList(stdout, title, items, current_list_selection, is_deletion_menu);
 
         var key_buffer: [3]u8 = undefined;
         const bytes_read = try stdin.read(&key_buffer);
 
         if (bytes_read == 1) {
             switch (key_buffer[0]) {
-                'j' => current_selection = @min(current_selection + 1, items.len - 1),
-                'k' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'g' => current_selection = 0,
-                'G' => current_selection = items.len - 1,
-                '\r', '\n' => return @intCast(current_selection),
+                'j' => current_list_selection = @min(current_list_selection + 1, items.len - 1),
+                'k' => current_list_selection = if (current_list_selection > 0) current_list_selection - 1 else 0,
+                'g' => current_list_selection = 0,
+                'G' => current_list_selection = items.len - 1,
+                '\r', '\n' => return @intCast(current_list_selection),
                 'q' => return null,
                 'm' => return -1,
+                'a' => return -2, // Add file
+                'd' => return -3, // Delete file
                 else => {},
             }
         } else if (bytes_read == 3 and key_buffer[0] == 27 and key_buffer[1] == '[') {
             switch (key_buffer[2]) {
-                'A' => current_selection = if (current_selection > 0) current_selection - 1 else 0,
-                'B' => current_selection = @min(current_selection + 1, items.len - 1),
+                'A' => current_list_selection = if (current_list_selection > 0) current_list_selection - 1 else 0,
+                'B' => current_list_selection = @min(current_list_selection + 1, items.len - 1),
                 else => {},
             }
         }

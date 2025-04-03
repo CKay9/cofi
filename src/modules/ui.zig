@@ -592,7 +592,8 @@ fn renderListFooter(writer: std.ArrayList(u8).Writer, current_selection: usize, 
     for (0..BORDER_WIDTH - 2) |_| try writer.print("─", .{});
     try writer.print("╮\n", .{});
 
-    try writer.print("│             {s}[m]{s} Menu | {s}[d]{s} Delete | {s}[q]{s} Quit            │\n", .{
+    try writer.print("│          {s}[m]{s}enu    {s}[a]{s}dd    {s}[d]{s}elete    {s}[q]{s}uit          │\n", .{
+        ANSI_BOLD_YELLOW, ANSI_RESET,
         ANSI_BOLD_YELLOW, ANSI_RESET,
         ANSI_BOLD_YELLOW, ANSI_RESET,
         ANSI_BOLD_YELLOW, ANSI_RESET,
